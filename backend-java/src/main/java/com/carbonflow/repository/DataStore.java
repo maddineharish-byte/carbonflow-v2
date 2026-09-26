@@ -48,21 +48,24 @@ public class DataStore {
         String acmeOrgId = SeedIds.ORG_ACME;
         String apexOrgId = SeedIds.ORG_APEX;
 
-        // 3. Facilities
-        Facility facDet = new Facility("fac-det-01", acmeOrgId, "Detroit Heavy Assembly Plant", "FAC-DET-01", "United States", "US-MRO", "1200 Industrial Blvd, Detroit, MI", 145000.0, "OPERATIONAL", Instant.now());
-        Facility facAtx = new Facility("fac-atx-02", acmeOrgId, "Austin Advanced Tech & Prototyping", "FAC-ATX-02", "United States", "US-ERCOT", "450 Silicon Pkwy, Austin, TX", 65000.0, "OPERATIONAL", Instant.now());
-        Facility facStg = new Facility("fac-stg-03", acmeOrgId, "Stuttgart R&D Engineering Campus", "FAC-STG-03", "Germany", "EU-DE-GRID", "Werkstraße 12, Stuttgart", 42000.0, "OPERATIONAL", Instant.now());
+        // 3. Facilities — prototype-era copies feeding the not-yet-migrated
+        // analytics/reports mocks only; the Phase 4 /facilities API reads
+        // PostgreSQL (schema shape: facilityType + ISO country + gridRegion).
+        Facility facDet = new Facility("fac-det-01", acmeOrgId, null, "Detroit Heavy Assembly Plant", "FAC-DET-01", "MANUFACTURING", "United States", "Michigan", "US-MRO", 145000.0, Instant.now(), Instant.now());
+        Facility facAtx = new Facility("fac-atx-02", acmeOrgId, null, "Austin Advanced Tech & Prototyping", "FAC-ATX-02", "MANUFACTURING", "United States", "Texas", "US-ERCOT", 65000.0, Instant.now(), Instant.now());
+        Facility facStg = new Facility("fac-stg-03", acmeOrgId, null, "Stuttgart R&D Engineering Campus", "FAC-STG-03", "MANUFACTURING", "Germany", "Baden-Württemberg", "EU-DE-GRID", 42000.0, Instant.now(), Instant.now());
 
-        Facility facApex = new Facility("fac-apex-01", apexOrgId, "Apex Nevada Logistics Hub", "FAC-APX-01", "United States", "US-WECC", "900 Desert Way, Reno, NV", 85000.0, "OPERATIONAL", Instant.now());
+        Facility facApex = new Facility("fac-apex-01", apexOrgId, null, "Apex Nevada Logistics Hub", "FAC-APX-01", "LOGISTICS", "United States", "Nevada", "US-WECC", 85000.0, Instant.now(), Instant.now());
 
         facilities.put(facDet.getId(), facDet);
         facilities.put(facAtx.getId(), facAtx);
         facilities.put(facStg.getId(), facStg);
         facilities.put(facApex.getId(), facApex);
 
-        // 4. Reporting Periods
-        ReportingPeriod rp2024 = new ReportingPeriod("period-acme-fy2024", acmeOrgId, "FY2024 Annual GHG Reporting Cycle", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
-        ReportingPeriod rp2024Apex = new ReportingPeriod("period-apex-fy2024", apexOrgId, "Apex FY2024 Inventory", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
+        // 4. Reporting Periods — prototype copies for the analytics mock;
+        // the Phase 4 /reporting-periods API reads PostgreSQL (V1 status).
+        ReportingPeriod rp2024 = new ReportingPeriod("period-acme-fy2024", acmeOrgId, "FY2024 Annual GHG Reporting Cycle", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), "OPEN", Instant.now(), Instant.now());
+        ReportingPeriod rp2024Apex = new ReportingPeriod("period-apex-fy2024", apexOrgId, "Apex FY2024 Inventory", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), "OPEN", Instant.now(), Instant.now());
         reportingPeriods.put(rp2024.getId(), rp2024);
         reportingPeriods.put(rp2024Apex.getId(), rp2024Apex);
 

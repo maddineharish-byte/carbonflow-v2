@@ -18,8 +18,8 @@ Base URI: `/api/v1`
 {
   "success": false,
   "error": {
-    "code": "RESOURCE_NOT_FOUND",
-    "message": "Reporting period does not exist or access denied"
+    "code": "REPORTING_PERIOD_NOT_FOUND",
+    "message": "Reporting period does not exist or access denied."
   }
 }
 ```
@@ -37,17 +37,47 @@ Base URI: `/api/v1`
 - `GET  /api/v1/auth/me` — Validate an existing access token and return the authenticated profile and active memberships. The frontend uses this endpoint for session restoration.
 - Refresh/logout failures use the standard error envelope with non-sensitive codes such as `REFRESH_TOKEN_REQUIRED`, `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REVOKED`, `USER_DEACTIVATED`, and `REFRESH_MEMBERSHIP_INVALID`.
 
-### 2.2 Organizations & Boundaries
+### 2.2 Organizations, Scope Structure & Boundaries
+Organization settings:
 - `GET  /api/v1/organizations/current` — Current tenant profile and settings.
 - `PUT  /api/v1/organizations/current` — Update organization settings (`organization.update`).
-- `GET  /api/v1/facilities` — List tenant facilities (`facilities.read`).
-- `POST /api/v1/facilities` — Create facility (`facilities.create`).
-- `GET  /api/v1/legal-entities` — List legal entities (`organization.read`).
-- `POST /api/v1/legal-entities` — Create legal entity (`organization.update`).
-- `GET  /api/v1/reporting-periods` — List reporting periods (`reporting_periods.read`).
-- `POST /api/v1/reporting-periods` — Create reporting period (`reporting_periods.create`).
-- `GET  /api/v1/boundaries` — List organizational boundary definitions.
-- `POST /api/v1/boundaries` — Configure reporting boundaries.
+
+Facilities (`facilities.read` / `facilities.create` / `facilities.update` / `facilities.delete`):
+- `GET  /api/v1/facilities` — List tenant facilities ordered by name.
+- `POST /api/v1/facilities` — Create facility → **201** "Facility registered successfully." Required: `name`, `facilityCode`, `country`, `gridRegion`; `facilityType` defaults to `MANUFACTURING` (`MANUFACTURING|OFFICE|DATA_CENTER|WAREHOUSE|RETAIL|LOGISTICS`); `floorAreaM2` ≥ 0; `legalEntityId` must belong to the caller's tenant (404 `LEGAL_ENTITY_NOT_FOUND`). A repeated code **within the tenant** → 409 `DUPLICATE_FACILITY_CODE` (uniqueness is `(organization_id, facility_code)` — other tenants may reuse a code).
+- `GET  /api/v1/facilities/:id` — Facility detail (greenfield verb).
+- `PUT  /api/v1/facilities/:id` — Full replace with create-time validation (`facilities.update`); code collision → 409 `DUPLICATE_FACILITY_CODE`.
+- `DELETE /api/v1/facilities/:id` — Hard delete (`facilities.delete`). Departments and boundary memberships cascade with the facility; rows referenced by activity data or emissions (`ON DELETE RESTRICT`) → 409 `RESOURCE_IN_USE`. The schema has no status column, so delete is the only lifecycle verb.
+
+Legal entities (`organization.read` / `organization.update`):
+- `GET  /api/v1/legal-entities` — List tenant legal entities ordered by name.
+- `POST /api/v1/legal-entities` — Create legal entity → **201**. `name` + `jurisdiction` required; `ownershipPercentage` 0–100 (default 100); `registrationNumber` optional. The schema defines no name/registration uniqueness, so duplicates are permitted.
+- `GET  /api/v1/legal-entities/:id` — Detail (greenfield verb).
+- `PUT  /api/v1/legal-entities/:id` — Partial update: only provided fields are validated and written (greenfield verb).
+- `DELETE /api/v1/legal-entities/:id` — Hard delete (greenfield verb); linked facilities are unlinked (`ON DELETE SET NULL`), never removed.
+
+Departments (greenfield — no Node counterpart; reuses `facilities.*` codes, ADR-015):
+- `GET  /api/v1/departments?facilityId=` — List tenant departments ordered by name; optional tenant-validated facility filter (foreign or unknown filter → empty list; malformed → 400 `INVALID_ARGUMENT`).
+- `POST /api/v1/departments` — Create → **201**. `facilityId` (must belong to the tenant, else 404 `FACILITY_NOT_FOUND`) + `name` (≤150).
+- `GET  /api/v1/departments/:id` · `PUT /api/v1/departments/:id` (partial: `name` and/or `facilityId`, re-parent tenant-validated) · `DELETE /api/v1/departments/:id` — greenfield verbs; departments always belong to a facility (V1 `facility_id NOT NULL`).
+
+Reporting periods (`reporting_periods.read` / `.create` / `.update`):
+- `GET  /api/v1/reporting-periods` — List tenant periods, newest start date first.
+- `POST /api/v1/reporting-periods` — Create → **201** "Reporting period created." `name`, `startDate`, `endDate` required (`YYYY-MM-DD`); inverted range → 400 `INVALID_DATE_RANGE`; unparseable date → 400 `VALIDATION_ERROR`; `status` defaults to `OPEN` (`OPEN|UNDER_AUDIT|LOCKED`). Overlapping periods are **not** restricted (no rule exists in schema/Node/docs).
+- `GET  /api/v1/reporting-periods/:id` — Detail (greenfield verb).
+- `PUT  /api/v1/reporting-periods/:id` — Partial update (greenfield verb): `name`; `startDate`+`endDate` always together; `status` validated against the V1 lifecycle values.
+- No `DELETE` verb: the frozen permission matrix has no `reporting_periods.delete` — the endpoint answers 405; lifecycle is `status`.
+
+Organizational boundaries (`reporting_periods.read` for reads, `reporting_periods.update` for writes; ADR-015):
+- `GET  /api/v1/boundaries` — List boundary definitions with persisted `facilityIds` membership.
+- `POST /api/v1/boundaries` — Configure a reporting boundary → **201**. Body: `reportingPeriodId` (required, tenant-validated else 404 `REPORTING_PERIOD_NOT_FOUND`), `consolidationApproach` (default `OPERATIONAL_CONTROL`; `OPERATIONAL_CONTROL|FINANCIAL_CONTROL|EQUITY_SHARE`), optional `notes`, optional `facilityIds[]` — **every id is tenant-validated (404 `FACILITY_NOT_FOUND`), and a cross-tenant pairing is rejected even when both UUIDs are valid; nothing is persisted on rejection (transactional)**.
+- `GET  /api/v1/boundaries/:id` — Detail with membership (greenfield verb).
+- `PUT  /api/v1/boundaries/:id` — Partial update of approach/notes (greenfield verb).
+- `DELETE /api/v1/boundaries/:id` — Hard delete (greenfield verb); membership rows cascade.
+- `POST /api/v1/boundaries/:id/facilities` — Attach `{ "facilityId": "..." }` → **201**; duplicate → 409 `DUPLICATE_BOUNDARY_FACILITY`; cross-tenant/unknown → 404 `FACILITY_NOT_FOUND` with no row written (greenfield verb).
+- `DELETE /api/v1/boundaries/:id/facilities/:facilityId` — Detach → 200; not attached → 404 `BOUNDARY_FACILITY_NOT_FOUND` (greenfield verb).
+
+**Scope rules (Phase 4):** every endpoint derives its organization exclusively from the authenticated tenant context — client-supplied organization ids are never accepted. Missing, malformed and cross-tenant ids are indistinguishable: all answer **404 `*_NOT_FOUND`** with "*… does not exist or access denied.*" so identifiers cannot be enumerated across tenants.
 
 ### 2.3 Activity Data & Data Requests
 - `GET  /api/v1/activity-data` — Query activity data with period & facility filters (`activity_data.read`).

@@ -89,11 +89,14 @@ class SecurityChainIntegrationTest extends PostgresBackedIntegrationTest {
     void holderOfPermissionPassesMethodSecurity() throws Exception {
         String adminToken = loginToken("admin@acmeglobal.com", "Password123!");
 
+        // Phase 4: the endpoint is PostgreSQL-backed with Node's payload
+        // contract (country + gridRegion required) and answers 201 on create.
         mockMvc.perform(post("/api/v1/facilities")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Phase 3 Probe Facility\",\"facilityCode\":\"FAC-PROBE3\"}"))
-                .andExpect(status().isOk())
+                        .content("{\"name\":\"Phase 3 Probe Facility\",\"facilityCode\":\"FAC-PROBE3\","
+                                + "\"country\":\"US\",\"gridRegion\":\"US-TEST\"}"))
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
     }
 
@@ -148,11 +151,26 @@ class SecurityChainIntegrationTest extends PostgresBackedIntegrationTest {
         String acmeToken = loginToken("admin@acmeglobal.com", "Password123!");
         String apexToken = loginToken("admin@apexcorp.com", "Password123!");
 
+        // Phase 4: facilities live in PostgreSQL (the prototype DataStore no
+        // longer feeds this endpoint), so each tenant creates its own probe.
+        mockMvc.perform(post("/api/v1/facilities")
+                        .header("Authorization", "Bearer " + acmeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Acme Scope Probe\",\"facilityCode\":\"SCOPE-ACME\","
+                                + "\"country\":\"US\",\"gridRegion\":\"US-TEST\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/facilities")
+                        .header("Authorization", "Bearer " + apexToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Apex Scope Probe\",\"facilityCode\":\"SCOPE-APEX\","
+                                + "\"country\":\"US\",\"gridRegion\":\"US-TEST\"}"))
+                .andExpect(status().isCreated());
+
         JsonNode acmeFacilities = readFacilities(acmeToken);
         JsonNode apexFacilities = readFacilities(apexToken);
 
-        assertFalse(acmeFacilities.isEmpty(), "expected seeded facilities for Acme");
-        assertFalse(apexFacilities.isEmpty(), "expected a seeded facility for Apex");
+        assertFalse(acmeFacilities.isEmpty(), "expected facilities for Acme");
+        assertFalse(apexFacilities.isEmpty(), "expected a facility for Apex");
 
         acmeFacilities.forEach(facility ->
                 assertEquals(SeedIds.ORG_ACME, facility.get("organizationId").asText()));

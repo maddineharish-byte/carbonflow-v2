@@ -95,15 +95,4 @@ class OrganizationCurrentTest extends PostgresBackedIntegrationTest {
         assertEquals(SeedIds.ORG_APEX, api.body().path("data").path("id").asText());
         assertEquals("Apex CleanTech Logistics", api.body().path("data").path("name").asText());
     }
-
-    private Api putJson(String uri, String bearerToken, String body) throws Exception {
-        var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                .put(uri)
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .content(body)
-                .header("Authorization", "Bearer " + bearerToken);
-        var result = mockMvc.perform(request).andReturn();
-        return new Api(result.getResponse().getStatus(),
-                objectMapper.readTree(result.getResponse().getContentAsString()));
-    }
 }

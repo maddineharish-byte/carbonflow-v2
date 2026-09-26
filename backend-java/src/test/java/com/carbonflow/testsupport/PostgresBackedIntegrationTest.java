@@ -19,8 +19,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -84,6 +86,30 @@ public abstract class PostgresBackedIntegrationTest {
     /** GET without status expectations. */
     protected Api getJson(String uri, String bearerToken) throws Exception {
         var request = get(uri);
+        if (bearerToken != null) {
+            request = request.header("Authorization", "Bearer " + bearerToken);
+        }
+        MvcResult result = mockMvc.perform(request).andReturn();
+        return new Api(result.getResponse().getStatus(),
+                objectMapper.readTree(result.getResponse().getContentAsString()));
+    }
+
+    /** PUT without status expectations — for update envelopes and error cases. */
+    protected Api putJson(String uri, String bearerToken, String body) throws Exception {
+        var request = put(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body == null ? "" : body);
+        if (bearerToken != null) {
+            request = request.header("Authorization", "Bearer " + bearerToken);
+        }
+        MvcResult result = mockMvc.perform(request).andReturn();
+        return new Api(result.getResponse().getStatus(),
+                objectMapper.readTree(result.getResponse().getContentAsString()));
+    }
+
+    /** DELETE without status expectations — for delete envelopes and 404/405 cases. */
+    protected Api deleteJson(String uri, String bearerToken) throws Exception {
+        var request = delete(uri);
         if (bearerToken != null) {
             request = request.header("Authorization", "Bearer " + bearerToken);
         }
