@@ -28,11 +28,13 @@ public class ApiResponse<T> {
 
     public ApiResponse() {}
 
+    /**
+     * Success envelope with the Node backend's default message
+     * ({@code sendSuccess(..., 'Success')} — the message field is always
+     * present on success responses there, so it is here too).
+     */
     public static <T> ApiResponse<T> ok(T data) {
-        ApiResponse<T> resp = new ApiResponse<>();
-        resp.setSuccess(true);
-        resp.setData(data);
-        return resp;
+        return ok(data, "Success");
     }
 
     public static <T> ApiResponse<T> ok(T data, String message) {

@@ -1,86 +1,131 @@
 package com.carbonflow.controller;
 
-import com.carbonflow.config.JwtTokenProvider;
 import com.carbonflow.config.TenantContext;
 import com.carbonflow.dto.ApiResponse;
-import com.carbonflow.dto.AuthRequests;
-import com.carbonflow.model.User;
-import com.carbonflow.repository.DataStore;
+import com.carbonflow.dto.AuthRequests.AuthSession;
+import com.carbonflow.dto.AuthRequests.LoginRequest;
+import com.carbonflow.dto.AuthRequests.LogoutResponse;
+import com.carbonflow.dto.AuthRequests.Profile;
+import com.carbonflow.dto.AuthRequests.RefreshResponse;
+import com.carbonflow.dto.AuthRequests.RegisterRequest;
+import com.carbonflow.dto.AuthRequests.RegisterResponse;
+import com.carbonflow.dto.AuthRequests.SwitchTenantRequest;
+import com.carbonflow.service.AuthException;
+import com.carbonflow.service.AuthService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
+/**
+ * Authentication endpoints — contract-compatible port of the Node reference
+ * backend's {@code /auth} handlers ({@code server/routes.ts}):
+ *
+ * <ul>
+ *   <li>{@code POST /login} — password grant with optional membership selector.</li>
+ *   <li>{@code POST /refresh} — single-use rotation; rejects context-override
+ *       fields ({@code userId|organizationId|targetOrgId|targetRole}) with 400.</li>
+ *   <li>{@code POST /logout} — revokes the whole refresh family; public
+ *       (authentication is the refresh token itself, as in Node).</li>
+ *   <li>{@code POST /switch-tenant-or-role} — switches within already-assigned
+ *       memberships only.</li>
+ *   <li>{@code GET /me} — fresh session context without tokens.</li>
+ *   <li>{@code POST /register} — public signup (greenfield, ADR-014): creates
+ *       a PENDING_ACTIVATION organization and answers 201 without tokens.</li>
+ * </ul>
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-    /**
-     * Valid BCrypt hash of a random throwaway string. When an account does not
-     * exist, login still performs one full BCrypt verification against this
-     * value so that response timing cannot distinguish an unknown account from
-     * a wrong password (user-enumeration hardening).
-     */
-    static final String TIMING_EQUALIZER_HASH =
-            "$2b$10$9zl/RKI67B2GfnKZhi2nzu9keezzNYt/acc46V5nG0hb5SGklfToa";
+    /** Context-override fields Node explicitly rejects on refresh. */
+    private static final String[] REFRESH_CONTEXT_FIELDS =
+            {"userId", "organizationId", "targetOrgId", "targetRole"};
 
-    private final DataStore dataStore;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final PasswordEncoder passwordEncoder;
+    private final AuthService authService;
+    private final ObjectMapper objectMapper;
 
-    public AuthController(DataStore dataStore, JwtTokenProvider jwtTokenProvider, PasswordEncoder passwordEncoder) {
-        this.dataStore = dataStore;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.passwordEncoder = passwordEncoder;
+    public AuthController(AuthService authService, ObjectMapper objectMapper) {
+        this.authService = authService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthRequests.LoginResponse>> login(@Valid @RequestBody AuthRequests.LoginRequest request) {
-        if (request.getEmail() == null || request.getPassword() == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.fail("INVALID_REQUEST", "Email and password are required."));
-        }
+    public ResponseEntity<ApiResponse<AuthSession>> login(@Valid @RequestBody LoginRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(authService.login(request)));
+    }
 
-        User user = dataStore.users.values().stream()
-                .filter(u -> u.getEmail().equalsIgnoreCase(request.getEmail().trim()))
-                .findFirst()
-                .orElse(null);
-
-        // Constant-time password verification against the stored BCrypt hash.
-        // A wrong password and an unknown account perform identical work and
-        // return the identical response (no user enumeration).
-        boolean passwordMatches;
-        if (user == null) {
-            passwordEncoder.matches(request.getPassword(), TIMING_EQUALIZER_HASH);
-            passwordMatches = false;
-        } else {
-            passwordMatches = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<RefreshResponse>> refresh(@RequestBody(required = false) JsonNode body) {
+        Map<String, Object> fields = toFields(body);
+        for (String field : REFRESH_CONTEXT_FIELDS) {
+            if (fields.containsKey(field)) {
+                throw new AuthException("VALIDATION_ERROR",
+                        "Refresh requests cannot change the authorization context.", HttpStatus.BAD_REQUEST);
+            }
         }
-        if (!passwordMatches) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("INVALID_CREDENTIALS", "Invalid email or password."));
-        }
+        return ResponseEntity.ok(ApiResponse.ok(
+                authService.refresh(readRefreshToken(body)),
+                "Refresh token rotated successfully."));
+    }
 
-        String token = jwtTokenProvider.generateToken(user);
-        AuthRequests.UserInfo userInfo = new AuthRequests.UserInfo(user.getId(), user.getEmail(), user.getFullName(), user.getOrganizationId(), user.getRole());
-        return ResponseEntity.ok(ApiResponse.ok(new AuthRequests.LoginResponse(token, userInfo), "Login successful."));
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<LogoutResponse>> logout(@RequestBody(required = false) JsonNode body) {
+        authService.logout(readRefreshToken(body));
+        return ResponseEntity.ok(ApiResponse.ok(
+                new LogoutResponse(true), "Refresh session revoked successfully."));
+    }
+
+    @PostMapping("/switch-tenant-or-role")
+    public ResponseEntity<ApiResponse<AuthSession>> switchTenant(
+            @RequestBody(required = false) SwitchTenantRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                authService.switchTenant(request, TenantContext.get()),
+                "Tenant and role switched successfully."));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<AuthRequests.UserInfo>> getCurrentUser() {
-        TenantContext ctx = TenantContext.get();
-        if (ctx == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("UNAUTHORIZED", "Not authenticated."));
-        }
+    public ResponseEntity<ApiResponse<Profile>> me() {
+        return ResponseEntity.ok(ApiResponse.ok(authService.me(TenantContext.get())));
+    }
 
-        User user = dataStore.users.get(ctx.getUserId());
-        if (user == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.fail("USER_NOT_FOUND", "User record missing."));
-        }
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse<RegisterResponse>> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(
+                authService.register(request),
+                "Registration received. The organization must be approved by a platform "
+                        + "administrator before users can sign in."));
+    }
 
-        AuthRequests.UserInfo userInfo = new AuthRequests.UserInfo(user.getId(), user.getEmail(), user.getFullName(), user.getOrganizationId(), user.getRole());
-        return ResponseEntity.ok(ApiResponse.ok(userInfo));
+    /**
+     * Reads the {@code refreshToken} field only when the body is a JSON object
+     * with a textual value (Node treats anything else as absent → 400
+     * REFRESH_TOKEN_REQUIRED from the service format check).
+     */
+    private String readRefreshToken(JsonNode body) {
+        if (body != null && body.isObject()) {
+            JsonNode token = body.get("refreshToken");
+            if (token != null && token.isTextual()) {
+                return token.asText();
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> toFields(JsonNode body) {
+        if (body == null || !body.isObject()) {
+            return Map.of();
+        }
+        return objectMapper.convertValue(body, new TypeReference<Map<String, Object>>() {
+        });
     }
 }

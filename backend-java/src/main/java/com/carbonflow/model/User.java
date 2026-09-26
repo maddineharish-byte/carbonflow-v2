@@ -1,30 +1,27 @@
 package com.carbonflow.model;
 
-import com.carbonflow.model.enums.Role;
 import java.time.Instant;
-import java.util.List;
 
+/**
+ * A row of the {@code users} table (V1): identity only — organization and
+ * role live in {@code organization_memberships} (see {@link Membership}).
+ */
 public class User {
     private String id;
     private String email;
     private String passwordHash;
     private String fullName;
-    private String organizationId;
-    private Role role;
-    private List<String> facilityScopes; // empty list means all facilities
     private boolean active;
     private Instant createdAt;
 
-    public User() {}
+    public User() {
+    }
 
-    public User(String id, String email, String passwordHash, String fullName, String organizationId, Role role, List<String> facilityScopes, boolean active, Instant createdAt) {
+    public User(String id, String email, String passwordHash, String fullName, boolean active, Instant createdAt) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
         this.fullName = fullName;
-        this.organizationId = organizationId;
-        this.role = role;
-        this.facilityScopes = facilityScopes;
         this.active = active;
         this.createdAt = createdAt;
     }
@@ -40,15 +37,6 @@ public class User {
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
-
-    public String getOrganizationId() { return organizationId; }
-    public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
-
-    public Role getRole() { return role; }
-    public void setRole(Role role) { this.role = role; }
-
-    public List<String> getFacilityScopes() { return facilityScopes; }
-    public void setFacilityScopes(List<String> facilityScopes) { this.facilityScopes = facilityScopes; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

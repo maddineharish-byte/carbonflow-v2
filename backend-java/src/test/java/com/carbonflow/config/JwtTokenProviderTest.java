@@ -1,14 +1,10 @@
 package com.carbonflow.config;
 
-import com.carbonflow.model.User;
 import com.carbonflow.model.enums.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -21,9 +17,10 @@ class JwtTokenProviderTest {
     private static final String OTHER_SECRET = "another-test-secret-9876543210fedcba9876543210fedcba";
     private static final long ONE_HOUR_MS = 3_600_000L;
 
-    private static User sampleUser(Role role) {
-        return new User("usr-test-1", "tester@acmeglobal.com", "$2a$10$abcdefghijklmnopqrstuv",
-                "Test User", "org-test-1", role, List.of(), true, Instant.now());
+    /** Identity arguments for the Phase 3 signature (userId/email/fullName/orgId/role). */
+    private static String sampleToken(JwtTokenProvider provider, Role role) {
+        return provider.generateToken("usr-test-1", "tester@acmeglobal.com",
+                "Test User", "org-test-1", role);
     }
 
     @Test
@@ -46,7 +43,7 @@ class JwtTokenProviderTest {
     @Test
     void generatesParsableTokenCarryingIdentityClaims() {
         JwtTokenProvider provider = new JwtTokenProvider(VALID_SECRET, ONE_HOUR_MS);
-        String token = provider.generateToken(sampleUser(Role.SUSTAINABILITY_MANAGER));
+        String token = sampleToken(provider, Role.SUSTAINABILITY_MANAGER);
 
         Claims claims = provider.parseToken(token);
         assertEquals("usr-test-1", claims.getSubject());
@@ -59,7 +56,7 @@ class JwtTokenProviderTest {
     @Test
     void rejectsTamperedToken() {
         JwtTokenProvider provider = new JwtTokenProvider(VALID_SECRET, ONE_HOUR_MS);
-        String token = provider.generateToken(sampleUser(Role.COMPANY_ADMIN));
+        String token = sampleToken(provider, Role.COMPANY_ADMIN);
 
         int midpoint = token.length() / 2;
         char original = token.charAt(midpoint);
@@ -71,8 +68,7 @@ class JwtTokenProviderTest {
 
     @Test
     void rejectsTokenSignedWithADifferentKey() {
-        String token = new JwtTokenProvider(VALID_SECRET, ONE_HOUR_MS)
-                .generateToken(sampleUser(Role.COMPANY_ADMIN));
+        String token = sampleToken(new JwtTokenProvider(VALID_SECRET, ONE_HOUR_MS), Role.COMPANY_ADMIN);
         JwtTokenProvider other = new JwtTokenProvider(OTHER_SECRET, ONE_HOUR_MS);
 
         assertThrows(JwtException.class, () -> other.parseToken(token));
@@ -81,7 +77,7 @@ class JwtTokenProviderTest {
     @Test
     void rejectsExpiredToken() throws InterruptedException {
         JwtTokenProvider provider = new JwtTokenProvider(VALID_SECRET, 1);
-        String token = provider.generateToken(sampleUser(Role.REVIEWER));
+        String token = sampleToken(provider, Role.REVIEWER);
         Thread.sleep(20);
 
         assertThrows(ExpiredJwtException.class, () -> provider.parseToken(token));
@@ -91,6 +87,6 @@ class JwtTokenProviderTest {
     void rejectsGarbageInput() {
         JwtTokenProvider provider = new JwtTokenProvider(VALID_SECRET, ONE_HOUR_MS);
         assertThrows(JwtException.class, () -> provider.parseToken("not-a-jwt"));
-        assertTrue(provider.generateToken(sampleUser(Role.DATA_OWNER)).split("\\.").length == 3);
+        assertTrue(sampleToken(provider, Role.DATA_OWNER).split("\\.").length == 3);
     }
 }

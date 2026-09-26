@@ -2,8 +2,8 @@
 
 This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, Maven, Spring Security (JWT), PostgreSQL, Flyway, REST, Controller → Service → Repository. It **supersedes** the Node/Express backend at cutover (Phase 10); until then the Node backend remains the live implementation and the authoritative API contract (ADR-010).
 
-> **Status: Phase 2 (Foundation & Decisions) complete — Phase 3 (Identity & Tenant Core) next.**
-> Historical note: this directory began as a prototype. Phases 1–2 remediated its role model, security, and configuration; its persistence layer, audit model, and endpoint coverage are still being rebuilt against the Node contract. Treat every claim in this file as the current, verified state — older claims ("matches 100% of the API contract", Dockerfile, "Automated Compliance Verification") were false and have been removed.
+> **Status: Phase 3 (Identity & Tenant Core) complete — Phase 4 (Scope & Structure) next.**
+> Historical note: this directory began as a prototype. Phases 1–3 remediated its role model, security, and configuration, and moved identity (organizations, users, memberships, refresh tokens) to PostgreSQL; the remaining domains are still served from memory until their phase. Treat every claim in this file as the current, verified state — older claims ("matches 100% of the API contract", Dockerfile, "Automated Compliance Verification") were false and have been removed.
 
 ---
 
@@ -15,11 +15,11 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | Framework | Spring Boot 3.3.3, Maven 3.9+ | REST, Controller → Service → Repository |
 | Security | Spring Security 6, stateless JWT (JJWT, HS256) | fail-closed secret, 15-minute access tokens |
 | Authorization | RBAC: 9 roles × 44 permissions via `@PreAuthorize` | ported from `server/rbac.ts`, parity-tested (ADR-011) |
-| Persistence | Plain JDBC (`spring-boot-starter-jdbc`) + PostgreSQL | **no ORM** (ADR-009); repositories arrive in Phase 3 |
-| Migrations | Flyway; single source `db/migration` (V1–V7) packaged onto the classpath | baseline strategy in ADR-012 |
+| Persistence | Plain JDBC (`spring-boot-starter-jdbc`) + PostgreSQL | **no ORM** (ADR-009); identity (orgs/users/memberships/refresh tokens) JDBC-backed since Phase 3, other domains migrate in their phases |
+| Migrations | Flyway; single source `db/migration` (V1–V8) packaged onto the classpath | baseline strategy in ADR-012; run on every `mvn verify` against an embedded test PostgreSQL |
 | Passwords | BCrypt cost 10 | identical to the Node backend's bcryptjs cost 10 |
 
-**No persistence yet.** Until the Phase 3 repositories land, most data is served from the in-memory `repository/DataStore` and is lost on restart. Only Flyway schema migrations are database-backed (they run when DB credentials are configured).
+**Identity is database-backed; the rest is still in memory.** `organizations`, `users`, `organization_memberships` and `refresh_tokens` are served by JDBC repositories over PostgreSQL (ADR-014). All other domains (facilities, activity data, factors, calculations, …) remain in the in-memory `repository/DataStore` and are lost on restart until their phase migrates them.
 
 ---
 
@@ -27,16 +27,20 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 
 | Area | State |
 |---|---|
-| Auth: `POST /auth/login`, `GET /auth/me` | **Implemented** (BCrypt, envelope, timing-equalized). No refresh/logout/switch-tenant yet → Phase 3 |
-| RBAC enforcement on 16 endpoints | **Implemented** (permission codes identical to Node) |
-| Envelope + global error handling (`@ControllerAdvice`) | **Implemented** (401/403/400/404/405/500 shaped like Node) |
-| Flyway runner + `V7` audit-state alignment | **Implemented** (not yet executed against a live DB — no credentials in this environment) |
+| Auth: `POST /auth/login`, `GET /auth/me` | **Implemented** (BCrypt, envelope, timing-equalized, DB-backed identity) |
+| Auth: `POST /auth/refresh` (rotation + family revocation), `POST /auth/logout`, `POST /auth/switch-tenant-or-role` | **Implemented** (Node contract + deliberate replay-kill fix, ADR-014) |
+| Registration: `POST /auth/register` (public, → `PENDING_ACTIVATION`) | **Implemented** (greenfield; no Node counterpart) |
+| Platform tenants: `GET /platform/tenants`, `/{id}/approve\|reject\|suspend` | **Implemented** (greenfield; `platform.tenants.read\|manage`) |
+| Tenant user admin: `GET/POST /users`, `PATCH /users/{id}`, `/disable`, `/enable` | **Implemented** (greenfield; tenant-scoped, self-disable/PLATFORM_ADMIN guards) |
+| Organization: `GET/PUT /organizations/current` | **Implemented** (tenant-scoped; V8 lifecycle `status` exposed) |
+| RBAC enforcement (permission codes identical to Node) | **Implemented** |
+| Envelope + global error handling (`@ControllerAdvice`) | **Implemented** (401/403/400/404/405/409/500 shaped like Node) |
+| Flyway runner + `V7` audit-state + `V8` org lifecycle | **Implemented** — V1–V8 run on every build against embedded PostgreSQL 14.10; V7–V8 baselined + applied on **live PostgreSQL 18.6** (`carbonflow_dev`) on 2026-09-26, app health verified against it |
 | Data endpoints (facilities, activity-data, emissions, factors, calculations, dashboard, CSV export) | **Partial** — paths/behavior being converged to the 39-endpoint Node contract (ADR-010); served from memory |
 | Audit workflow (`/audit-rooms`, 6-state enum) | **Legacy** — must be replaced by the canonical 10-state machine in Phase 5 |
 | Evidence upload | **Mocked** (`/evidence/upload-mock` takes no bytes, never hashes) |
-| Refresh tokens, logout, tenant/role switching, user CRUD, registration/approval, platform admin | **Missing** → Phases 3, 7 |
-| Persistence (JDBC repositories) | **Missing** → Phase 3+ |
-| Tests | **36 tests** (JUnit 5): RBAC parity, JWT, login/BCrypt, error envelope, full security chain |
+| Persistence (JDBC repositories) | **Partial** — identity + org lifecycle (Phase 3); remaining domains migrate in Phases 4–7 |
+| Tests | **84 tests** (JUnit 5): RBAC parity, JWT, security chain, refresh rotation/replay, switch-tenant, registration lifecycle, user admin, org current — all against embedded PostgreSQL |
 
 ---
 
@@ -51,14 +55,18 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | Variable | Purpose |
 |---|---|
 | `CARBONFLOW_JWT_SECRET` | HS256 signing key, **≥ 32 bytes**. Startup fails fast if missing/short — there is no committed default. |
+| `CARBONFLOW_REFRESH_TOKEN_SECRET` | HMAC-SHA256 key for refresh-token hashes, **≥ 32 bytes**. Fail-fast at startup; only the hash of a refresh token is ever stored. |
+| `CARBONFLOW_SEED_DEMO_DATA` | `true` enables the development identity seed (organizations/users/memberships). Default `false` — no demo credential is written without explicit opt-in. |
 | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection (`DB_PORT` defaults to 5432). Placeholders are unresolved by default, so startup fails fast when unset. |
 | `CORS_ORIGINS` | Optional comma-separated origin allow-list (default `http://localhost:3000,http://localhost:5173`). |
 
 ```bash
 cd backend-java
-mvn clean verify                                  # compile + all tests
+mvn clean verify                                  # compile + all tests (embedded PostgreSQL, no Docker needed)
 CARBONFLOW_JWT_SECRET='...32+ random bytes...' \
+CARBONFLOW_REFRESH_TOKEN_SECRET='...32+ random bytes...' \
 DB_HOST=localhost DB_NAME=carbonflow_dev DB_USER=... DB_PASSWORD=... \
+CARBONFLOW_SEED_DEMO_DATA=true \
 mvn spring-boot:run
 ```
 
@@ -66,13 +74,13 @@ Server starts on port `8080`.
 
 ### Migrations (Flyway, ADR-012)
 
-Migrations live in the repository-root `db/migration` folder (`V1`–`V7`, Flyway naming) and are packaged onto the classpath by `pom.xml` — the same files any deployment tooling applies.
+Migrations live in the repository-root `db/migration` folder (`V1`–`V8`, Flyway naming) and are packaged onto the classpath by `pom.xml` — the same files any deployment tooling applies. The test suite (`dbtest` profile) runs **V1…V8 on every `mvn verify`** against a zonky embedded PostgreSQL (test scope only; production always uses the real database via `DB_*` variables).
 
 - **Empty database** → `V1…Vn` applied in order.
 - **Database already migrated manually through V6** (no `flyway_schema_history`) → baselined at 6, newer migrations applied only.
 - **Partially migrated database** → must be baselined manually before starting.
 
-`V7` widens `carbon_audits.status` to the canonical 10-state audit machine (adds `CORRECTION_REQUESTED`, `REJECTED`), resolving the 8-vs-10-state contradiction recorded in Phase 1.
+Notable migrations: `V7` widens `carbon_audits.status` to the canonical 10-state audit machine (adds `CORRECTION_REQUESTED`, `REJECTED`), resolving the 8-vs-10-state contradiction recorded in Phase 1. `V8` adds the organization lifecycle (`status` + status_changed_at/by/note) used by registration/approval (ADR-014).
 
 There is **no Dockerfile** in this directory (previous README instructions referenced one that does not exist).
 
@@ -80,14 +88,15 @@ There is **no Dockerfile** in this directory (previous README instructions refer
 
 ## Seed Accounts (development only)
 
-Passwords are stored **only as BCrypt hashes**; these demo credentials exist for local development and must be replaced before any production cutover (Phase 10).
+Written by `DemoDataSeeder` **only** when `CARBONFLOW_SEED_DEMO_DATA=true` (idempotent, fixed UUIDs from `SeedIds`). Passwords are stored **only as BCrypt cost-10 hashes**; these demo credentials exist for local development and must be replaced before any production cutover (Phase 10).
 
-| Email | Password | Organization | Role |
+| Email | Password | Organization(s) | Role |
 |---|---|---|---|
 | `admin@acmeglobal.com` | `Password123!` | Acme Global Manufacturing | `COMPANY_ADMIN` |
 | `manager@acmeglobal.com` | `Password123!` | Acme Global Manufacturing | `SUSTAINABILITY_MANAGER` |
-| `auditor@ey-assurance.com` | `Password123!` | Acme Global Manufacturing | `ASSURANCE_PROVIDER` |
+| `auditor@ey-assurance.com` | `Password123!` | Acme Global Manufacturing **and** Apex CleanTech Logistics | `ASSURANCE_PROVIDER` (dual membership → switch-tenant demo) |
 | `admin@apexcorp.com` | `Password123!` | Apex CleanTech Logistics | `COMPANY_ADMIN` |
+| `platform.admin@carbonflow.test` | `Password123!` | CarbonFlow Platform | `PLATFORM_ADMIN` (platform tenants + test-suite) |
 
 The canonical role set is the 9 roles of `server/types.ts` / V2 seed — there is no `SUPER_ADMIN` (docs/RBAC.md).
 
@@ -98,16 +107,16 @@ The canonical role set is the 9 roles of `server/types.ts` / V2 seed — there i
 `GET /api/v1/test-suite/run` runs internal consistency assertions (tenant boundaries, decimal precision, dual-reporting segregation, checklist guards, hash presence).
 
 - It is **not** public: it requires authentication **and** `platform.tenants.manage`.
-- No `PLATFORM_ADMIN` seed exists yet (arrives with Phase 7 platform administration), so the endpoint is intentionally unreachable until then.
+- It is reachable as of Phase 3 via the seeded `platform.admin@carbonflow.test` (role `PLATFORM_ADMIN`, holds `platform.tenants.manage`).
 - It is a self-test of invariants — it is **not** evidence of external compliance or assurance, and must not be described as such.
 
 ---
 
-## Security posture after Phase 2
+## Security posture after Phase 3
 
-Fixed: plaintext password comparison · zero authorization · committed JWT secret · CORS `*` + credentials · unauthenticated self-test · envelope-incomplete error responses · silent token failures · CGLIB-proxy field-nulling trap (ADR-013).
+Fixed: plaintext password comparison · zero authorization · committed JWT secret · CORS `*` + credentials · unauthenticated self-test · envelope-incomplete error responses · silent token failures · CGLIB-proxy field-nulling trap (ADR-013) · refresh-token rotation with replay detection (replayed token now revokes the whole family — deliberate strengthening over Node) · logout session invalidation · DB-backed per-request identity validation (ADR-014).
 
-Still open (tracked, not fixed here): `?token=` query-string acceptance · login throttling/lockout · refresh-token rotation & logout invalidation (Phase 3) · DB TLS · facility-level scoping (Phase 4) · demo seeds (Phase 10).
+Still open (tracked, not fixed here): `?token=` query-string acceptance · login throttling/lockout (Phase 9) · DB TLS (Phase 9) · facility-level scoping (Phase 4) · demo seeds on non-dev databases (opt-in flag exists; cutover review Phase 10).
 
 ---
 
@@ -117,8 +126,8 @@ Still open (tracked, not fixed here): `?token=` query-string acceptance · login
 |---|---|
 | 1 Discovery ✅ | Repository-wide audit (report in session) |
 | 2 Foundation & Decisions ✅ | ADRs 009–013, Java 21, Flyway + V7, RBAC, envelope, BCrypt, tests |
-| 3 Identity & Tenant Core | JDBC repositories, auth refresh/logout, users/orgs/memberships, registration → approval |
+| 3 Identity & Tenant Core ✅ | JDBC identity (orgs/users/memberships/refresh tokens), refresh rotation, logout, switch-tenant, registration → approval, user admin, V8, ADR-014 |
 | 4 Scope & Structure / 5 Governance & Audit / 6 Reporting / 7 Platform Admin | Module-by-module contract convergence |
 | 8 Frontend Integration · 9 Hardening & QA · 10 Cutover | Rewire React, test parity, retire `server/` |
 
-Decisions and rationale: `docs/DECISIONS.md` (ADR-001–013). API contract: `docs/API.md` + the Node implementation in `server/`.
+Decisions and rationale: `docs/DECISIONS.md` (ADR-001–014). API contract: `docs/API.md` + the Node implementation in `server/`.

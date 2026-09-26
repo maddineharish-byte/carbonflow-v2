@@ -30,13 +30,16 @@ import java.util.Map;
  * Stateless JWT security chain.
  *
  * <ul>
- *   <li>Public: login and health only. Everything under {@code /api/v1} requires
- *       an authenticated principal; individual endpoints then enforce their
- *       permission via {@code @PreAuthorize}.</li>
+ *   <li>Public: health, login, register, refresh and logout (the auth endpoints
+ *       are unauthenticated by contract — registration precedes approval,
+ *       refresh/logout authenticate through the refresh token in the body).
+ *       Everything else under {@code /api/v1} requires a principal; individual
+ *       endpoints then enforce their permission via {@code @PreAuthorize}.</li>
  *   <li>CORS uses the explicit origin allow-list from configuration — never
  *       {@code *} together with credentials.</li>
  *   <li>401/403 responses use the platform envelope
- *       {@code {success:false, error:{code,message}}}.</li>
+ *       {@code {success:false, error:{code,message}}} with the Node reference
+ *       backend's messages.</li>
  * </ul>
  */
 @Configuration
@@ -64,6 +67,11 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                        // Refresh is authenticated by the refresh token in the body
+                        // itself (Node parity): no bearer token required.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
                         .requestMatchers("/api/health", "/api/v1/health").permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         // Anything outside the API surface (static assets, error page)
@@ -105,14 +113,19 @@ public class SecurityConfig {
         return source;
     }
 
-    /** 401 responses in the platform envelope shape. */
+    /** 401 responses in the platform envelope shape (Node's exact message). */
     private AuthenticationEntryPoint authenticationEntryPoint() {
         return (request, response, authException) ->
                 writeEnvelope(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED",
-                        "Authentication required. Provide a valid bearer token.");
+                        "Missing or malformed Authorization header or token query parameter.");
     }
 
-    /** 403 responses in the platform envelope shape. */
+    /**
+     * 403 responses in the platform envelope shape. Node reveals the caller's
+     * own role and the missing permission; Spring does not pass the failing
+     * expression to the handler, so the message stays generic (documented
+     * deviation — code and status match).
+     */
     private AccessDeniedHandler accessDeniedHandler() {
         return (request, response, accessDeniedException) ->
                 writeEnvelope(response, HttpStatus.FORBIDDEN, "FORBIDDEN",

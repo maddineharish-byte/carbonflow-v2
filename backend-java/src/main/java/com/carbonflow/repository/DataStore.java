@@ -2,7 +2,6 @@ package com.carbonflow.repository;
 
 import com.carbonflow.model.*;
 import com.carbonflow.model.enums.*;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -10,11 +9,16 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
- * In-memory store backing the pre-persistence prototype controllers until the
- * JDBC repositories land (Phase 3+).
+ * In-memory store backing the prototype-era domains (facilities, reporting
+ * periods, emission factors, activity data, calculations, evidence, audits)
+ * until their JDBC repositories land (Phase 4+).
+ *
+ * <p>Identity — organizations, users, memberships — moved to PostgreSQL in
+ * Phase 3 and is seeded by {@link DemoDataSeeder} under fixed ids
+ * ({@link SeedIds}); the domains below reference those same UUIDs so tenant
+ * scoping stays consistent across both persistence worlds.
  *
  * <p>Deliberately annotated {@code @Component}, NOT {@code @Repository}: with
  * spring-boot-starter-jdbc present, {@code @Repository} beans get a CGLIB
@@ -24,20 +28,6 @@ import java.util.stream.Collectors;
 @Component
 public class DataStore {
 
-    /**
-     * Seed credentials are hashed with the same algorithm and cost as the login
-     * check (BCrypt cost 10 — identical to bcryptjs cost 10 in the Node
-     * reference backend). No plaintext credential is stored anywhere.
-     */
-    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder(10);
-
-    private static String hash(String rawPassword) {
-        return PASSWORD_ENCODER.encode(rawPassword);
-    }
-
-
-    public final Map<String, Organization> organizations = new ConcurrentHashMap<>();
-    public final Map<String, User> users = new ConcurrentHashMap<>();
     public final Map<String, Facility> facilities = new ConcurrentHashMap<>();
     public final Map<String, ReportingPeriod> reportingPeriods = new ConcurrentHashMap<>();
     public final Map<String, EmissionFactor> emissionFactors = new ConcurrentHashMap<>();
@@ -53,29 +43,17 @@ public class DataStore {
     }
 
     private void seedInitialData() {
-        // 1. Organizations
-        Organization acme = new Organization("org-acme-corp", "Acme Global Manufacturing", "acme-global", "2024", Instant.now());
-        Organization apex = new Organization("org-apex-cleantech", "Apex CleanTech Logistics", "apex-cleantech", "2024", Instant.now());
-        organizations.put(acme.getId(), acme);
-        organizations.put(apex.getId(), apex);
-
-        // 2. Users (canonical roles; demo password stored only as a BCrypt hash)
-        User adminAcme = new User("usr-acme-admin", "admin@acmeglobal.com", hash("Password123!"), "Elena Rostova", acme.getId(), Role.COMPANY_ADMIN, List.of(), true, Instant.now());
-        User mgrAcme = new User("usr-acme-mgr", "manager@acmeglobal.com", hash("Password123!"), "Marcus Vance", acme.getId(), Role.SUSTAINABILITY_MANAGER, List.of(), true, Instant.now());
-        User auditor = new User("usr-auditor-1", "auditor@ey-assurance.com", hash("Password123!"), "Sarah Jenkins (EY Auditor)", acme.getId(), Role.ASSURANCE_PROVIDER, List.of(), true, Instant.now());
-        User adminApex = new User("usr-apex-admin", "admin@apexcorp.com", hash("Password123!"), "David Chen", apex.getId(), Role.COMPANY_ADMIN, List.of(), true, Instant.now());
-
-        users.put(adminAcme.getId(), adminAcme);
-        users.put(mgrAcme.getId(), mgrAcme);
-        users.put(auditor.getId(), auditor);
-        users.put(adminApex.getId(), adminApex);
+        // Tenant ids: identity lives in PostgreSQL (Phase 3) — these are the
+        // same fixed UUIDs DemoDataSeeder inserts.
+        String acmeOrgId = SeedIds.ORG_ACME;
+        String apexOrgId = SeedIds.ORG_APEX;
 
         // 3. Facilities
-        Facility facDet = new Facility("fac-det-01", acme.getId(), "Detroit Heavy Assembly Plant", "FAC-DET-01", "United States", "US-MRO", "1200 Industrial Blvd, Detroit, MI", 145000.0, "OPERATIONAL", Instant.now());
-        Facility facAtx = new Facility("fac-atx-02", acme.getId(), "Austin Advanced Tech & Prototyping", "FAC-ATX-02", "United States", "US-ERCOT", "450 Silicon Pkwy, Austin, TX", 65000.0, "OPERATIONAL", Instant.now());
-        Facility facStg = new Facility("fac-stg-03", acme.getId(), "Stuttgart R&D Engineering Campus", "FAC-STG-03", "Germany", "EU-DE-GRID", "Werkstraße 12, Stuttgart", 42000.0, "OPERATIONAL", Instant.now());
+        Facility facDet = new Facility("fac-det-01", acmeOrgId, "Detroit Heavy Assembly Plant", "FAC-DET-01", "United States", "US-MRO", "1200 Industrial Blvd, Detroit, MI", 145000.0, "OPERATIONAL", Instant.now());
+        Facility facAtx = new Facility("fac-atx-02", acmeOrgId, "Austin Advanced Tech & Prototyping", "FAC-ATX-02", "United States", "US-ERCOT", "450 Silicon Pkwy, Austin, TX", 65000.0, "OPERATIONAL", Instant.now());
+        Facility facStg = new Facility("fac-stg-03", acmeOrgId, "Stuttgart R&D Engineering Campus", "FAC-STG-03", "Germany", "EU-DE-GRID", "Werkstraße 12, Stuttgart", 42000.0, "OPERATIONAL", Instant.now());
 
-        Facility facApex = new Facility("fac-apex-01", apex.getId(), "Apex Nevada Logistics Hub", "FAC-APX-01", "United States", "US-WECC", "900 Desert Way, Reno, NV", 85000.0, "OPERATIONAL", Instant.now());
+        Facility facApex = new Facility("fac-apex-01", apexOrgId, "Apex Nevada Logistics Hub", "FAC-APX-01", "United States", "US-WECC", "900 Desert Way, Reno, NV", 85000.0, "OPERATIONAL", Instant.now());
 
         facilities.put(facDet.getId(), facDet);
         facilities.put(facAtx.getId(), facAtx);
@@ -83,8 +61,8 @@ public class DataStore {
         facilities.put(facApex.getId(), facApex);
 
         // 4. Reporting Periods
-        ReportingPeriod rp2024 = new ReportingPeriod("period-acme-fy2024", acme.getId(), "FY2024 Annual GHG Reporting Cycle", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
-        ReportingPeriod rp2024Apex = new ReportingPeriod("period-apex-fy2024", apex.getId(), "Apex FY2024 Inventory", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
+        ReportingPeriod rp2024 = new ReportingPeriod("period-acme-fy2024", acmeOrgId, "FY2024 Annual GHG Reporting Cycle", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
+        ReportingPeriod rp2024Apex = new ReportingPeriod("period-apex-fy2024", apexOrgId, "Apex FY2024 Inventory", LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31), false);
         reportingPeriods.put(rp2024.getId(), rp2024);
         reportingPeriods.put(rp2024Apex.getId(), rp2024Apex);
 
@@ -104,15 +82,15 @@ public class DataStore {
         emissionFactors.put(efGridMkt.getId(), efGridMkt);
 
         // 6. Seed Calculations & Emission Records for Acme
-        seedAcmeRecords(acme.getId(), facDet.getId(), rp2024.getId(), efGas, new BigDecimal("500000"), "kWh", new BigDecimal("91.440"), "calc-1");
-        seedAcmeRecords(acme.getId(), facDet.getId(), rp2024.getId(), efDieselGen, new BigDecimal("12500"), "Litres", new BigDecimal("34.4525"), "calc-2");
-        seedAcmeRecords(acme.getId(), facDet.getId(), rp2024.getId(), efFleetDiesel, new BigDecimal("45000"), "Litres", new BigDecimal("121.014"), "calc-3");
-        seedAcmeRecords(acme.getId(), facDet.getId(), rp2024.getId(), efRefrig, new BigDecimal("45"), "KG", new BigDecimal("93.960"), "calc-4");
-        seedAcmeRecords(acme.getId(), facDet.getId(), rp2024.getId(), efGridLoc, new BigDecimal("1250000"), "kWh", new BigDecimal("499.98375"), "calc-5");
-        seedAcmeRecords(acme.getId(), facAtx.getId(), rp2024.getId(), efGridMkt, new BigDecimal("820000"), "kWh", BigDecimal.ZERO, "calc-6");
+        seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efGas, new BigDecimal("500000"), "kWh", new BigDecimal("91.440"), "calc-1");
+        seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efDieselGen, new BigDecimal("12500"), "Litres", new BigDecimal("34.4525"), "calc-2");
+        seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efFleetDiesel, new BigDecimal("45000"), "Litres", new BigDecimal("121.014"), "calc-3");
+        seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efRefrig, new BigDecimal("45"), "KG", new BigDecimal("93.960"), "calc-4");
+        seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efGridLoc, new BigDecimal("1250000"), "kWh", new BigDecimal("499.98375"), "calc-5");
+        seedAcmeRecords(acmeOrgId, facAtx.getId(), rp2024.getId(), efGridMkt, new BigDecimal("820000"), "kWh", BigDecimal.ZERO, "calc-6");
 
         // 7. Audit Room
-        AuditRoom room = new AuditRoom("audit-acme-2024", acme.getId(), rp2024.getId(), "FY2024 ISO 14064-3 Third-Party Assurance", AuditStatus.READY_FOR_VERIFICATION, "auditor@ey-assurance.com", Instant.now());
+        AuditRoom room = new AuditRoom("audit-acme-2024", acmeOrgId, rp2024.getId(), "FY2024 ISO 14064-3 Third-Party Assurance", AuditStatus.READY_FOR_VERIFICATION, "auditor@ey-assurance.com", Instant.now());
         room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-01", "Boundary definition validated under Operational Control criteria", true, true));
         room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-02", "Scope 2 Dual-Reporting verified (Location-based vs Market-based)", true, true));
         room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-03", "Refrigerant mass-balance leak records reconciled with maintenance invoices", true, true));
@@ -130,7 +108,7 @@ public class DataStore {
 
         String formula = qty.toPlainString() + " " + unit + " × " + factor.getFactorValue().toPlainString() + " = " + tonnes.multiply(new BigDecimal("1000")).toPlainString() + " kgCO2e";
         Calculation calc = new Calculation(calcId, orgId, actId, factor.getId(), qty, unit, qty, unit, factor.getFactorValue(),
-                tonnes.multiply(new BigDecimal("1000")), tonnes, formula, "a6d8c9e4f2b1d3e8a5b2c7e9f0d1a4b6c8e0f2d4a6b8c0e2f4a6b8c0d2e4f6a8", "usr-acme-admin", Instant.now());
+                tonnes.multiply(new BigDecimal("1000")), tonnes, formula, "a6d8c9e4f2b1d3e8a5b2c7e9f0d1a4b6c8e0f2d4a6b8c0e2f4a6b8c0d2e4f6a8", SeedIds.USER_ACME_ADMIN, Instant.now());
         calculations.put(calcId, calc);
 
         String emId = "em-" + calcId;

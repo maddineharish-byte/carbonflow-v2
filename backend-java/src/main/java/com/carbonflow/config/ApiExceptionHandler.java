@@ -1,8 +1,11 @@
 package com.carbonflow.config;
 
 import com.carbonflow.dto.ApiResponse;
+import com.carbonflow.service.AuthException;
+import com.carbonflow.service.AuthPersistenceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -71,6 +74,34 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Insufficient permissions for this operation.");
+    }
+
+    /**
+     * Contract failures from the auth/identity services: the Node reference
+     * backend's exact status + error code (INVALID_CREDENTIALS,
+     * REFRESH_TOKEN_EXPIRED, SWITCH_NOT_AUTHORIZED, ORG_NOT_FOUND, …).
+     */
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthException(AuthException ex) {
+        return error(ex.getStatus(), ex.getCode(), ex.getMessage());
+    }
+
+    /** Database unreachable on an authentication path (Node: 503 AUTH_PERSISTENCE_UNAVAILABLE). */
+    @ExceptionHandler(AuthPersistenceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthPersistence(AuthPersistenceException ex) {
+        log.error("Authentication persistence unavailable", ex);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_PERSISTENCE_UNAVAILABLE", ex.getMessage());
+    }
+
+    /**
+     * Database failures outside the auth paths (relevant from Phase 4 when
+     * more domains become PostgreSQL-backed): 503, never a leaky 500.
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataAccess(DataAccessException ex) {
+        log.error("Database access failure", ex);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "PERSISTENCE_UNAVAILABLE",
+                "A required data store is temporarily unavailable.");
     }
 
     /** Unexpected failure: full detail stays in the server log only. */

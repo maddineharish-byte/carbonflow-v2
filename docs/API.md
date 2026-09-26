@@ -29,7 +29,7 @@ Base URI: `/api/v1`
 ## 2. API Endpoints by Domain
 
 ### 2.1 Authentication & Profile
-- `POST /api/v1/auth/register` — Register user & organization.
+- `POST /api/v1/auth/register` — Register user & organization. Creates the organization in `PENDING_ACTIVATION` with a `COMPANY_ADMIN` user and membership in one transaction; answers **201 without tokens** (sign-in is blocked until platform approval). Duplicate email → 409 `EMAIL_ALREADY_REGISTERED`; blank fields → 400 `VALIDATION_ERROR`.
 - `POST /api/v1/auth/login` — Explicitly authenticate a user and receive `accessToken` (15m), opaque `refreshToken` (7d), and the user's active organization/role membership options. The refresh token is returned only in the authentication response; the server stores only its keyed hash.
 - `POST /api/v1/auth/switch-tenant-or-role` — **Authenticated only.** Switch to an active organization/role combination already assigned to the authenticated user. The endpoint never creates or mutates memberships, and rejects unauthorized organization/role combinations. `PLATFORM_ADMIN` is not selectable through ordinary tenant switching.
 - `POST /api/v1/auth/refresh` — Accept `{ "refreshToken": "..." }`, validate the server-side record, active user, and active organization/role membership, revoke the old token, and return a new access/refresh pair. The endpoint is single-use and rejects `userId`, `organizationId`, `targetOrgId`, and `targetRole` context overrides.
@@ -96,3 +96,20 @@ Base URI: `/api/v1`
 - `GET  /api/v1/analytics/dashboard` — Executive summary KPIs, Scope breakdown, audit progress (`analytics.read`).
 - `GET  /api/v1/analytics/breakdown` — Detailed scope, facility, and trend series.
 - `GET  /api/v1/reports/export` — Export CSV format for emissions ledger and audit packs (`reports.read`).
+
+### 2.10 Tenant User Administration & Platform Tenants (greenfield — Java only)
+> **Not part of the Node reference contract.** The Node backend has no users or platform endpoints; these were specified in Phase 3 (ADR-014) because registration/approval and tenant user administration require them. They follow the standard envelope and permission model.
+
+Tenant user administration (all scoped to the caller's organization; `users.read` / `users.create` / `users.update` / `users.disable`):
+- `GET  /api/v1/users` — List the tenant's members (id, email, fullName, role, active, createdAt, lastLoginAt).
+- `POST /api/v1/users` — Create a user with a role assignment (201). 409 `EMAIL_ALREADY_REGISTERED` for duplicates; `PLATFORM_ADMIN` cannot be assigned by tenant administrators.
+- `PATCH /api/v1/users/:id` — Update fullName / role / active. Administrators cannot change their own role or disable themselves (400 `VALIDATION_ERROR`); unknown or cross-tenant ids → 404 `USER_NOT_FOUND`.
+- `POST /api/v1/users/:id/disable` — Deactivate the global account (blocks sign-in and refresh with `USER_DEACTIVATED`).
+- `POST /api/v1/users/:id/enable` — Reactivate.
+
+Platform tenant administration (permissions `platform.tenants.read` / `platform.tenants.manage`, held only by `PLATFORM_ADMIN`):
+- `GET  /api/v1/platform/tenants?status=` — List organizations by lifecycle status (`PENDING_ACTIVATION`, `ACTIVE`, `REJECTED`, `SUSPENDED`).
+- `POST /api/v1/platform/tenants/:id/approve` — `PENDING_ACTIVATION|REJECTED|SUSPENDED` → `ACTIVE` ("Organization approved.").
+- `POST /api/v1/platform/tenants/:id/reject` — → `REJECTED` ("Organization rejected."), optional `{ "note": "..." }`.
+- `POST /api/v1/platform/tenants/:id/suspend` — → `SUSPENDED` ("Organization suspended."), optional `{ "note": "..." }`.
+- Transitions record actor (`status_changed_by`), time and note (V8 columns). A non-`ACTIVE` organization can neither log in (403 `ORGANIZATION_NOT_ACTIVE` with a per-status message) nor refresh (401 `REFRESH_MEMBERSHIP_INVALID`); already-issued access tokens drain within their 15-minute lifetime.

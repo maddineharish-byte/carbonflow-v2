@@ -5,6 +5,7 @@ import com.carbonflow.model.enums.AuditStatus;
 import com.carbonflow.model.enums.GHGScope;
 import com.carbonflow.model.enums.Scope2Method;
 import com.carbonflow.repository.DataStore;
+import com.carbonflow.repository.SeedIds;
 import com.carbonflow.service.GhgCalculationEngine;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,15 +53,15 @@ public class TestSuiteController {
         List<TestResultItem> results = new ArrayList<>();
 
         // Test 1: Tenant Isolation - Facilities
-        long acmeFacs = dataStore.facilities.values().stream().filter(f -> f.getOrganizationId().equals("org-acme-corp")).count();
-        long apexFacs = dataStore.facilities.values().stream().filter(f -> f.getOrganizationId().equals("org-apex-cleantech")).count();
+        long acmeFacs = dataStore.facilities.values().stream().filter(f -> f.getOrganizationId().equals(SeedIds.ORG_ACME)).count();
+        long apexFacs = dataStore.facilities.values().stream().filter(f -> f.getOrganizationId().equals(SeedIds.ORG_APEX)).count();
         boolean pass1 = acmeFacs == 3 && apexFacs == 1;
         results.add(new TestResultItem("SEC-TEN-01", "MULTI_TENANT_SECURITY", "Facility Tenant Isolation", pass1,
                 "Tenant A has " + acmeFacs + " facilities, Tenant B has " + apexFacs + ". Cross-tenant contamination: 0."));
 
         // Test 2: Tenant Isolation - Activity Data
-        long acmeActs = dataStore.activityData.values().stream().filter(a -> a.getOrganizationId().equals("org-acme-corp")).count();
-        long apexActs = dataStore.activityData.values().stream().filter(a -> a.getOrganizationId().equals("org-apex-cleantech")).count();
+        long acmeActs = dataStore.activityData.values().stream().filter(a -> a.getOrganizationId().equals(SeedIds.ORG_ACME)).count();
+        long apexActs = dataStore.activityData.values().stream().filter(a -> a.getOrganizationId().equals(SeedIds.ORG_APEX)).count();
         boolean pass2 = acmeActs >= 6 && apexActs == 0;
         results.add(new TestResultItem("SEC-TEN-02", "MULTI_TENANT_SECURITY", "Activity Data Isolation", pass2,
                 "Tenant A has " + acmeActs + " activity records. Tenant B context cannot observe any Tenant A records."));

@@ -1,13 +1,10 @@
 package com.carbonflow.config;
 
+import com.carbonflow.repository.SeedIds;
+import com.carbonflow.testsupport.PostgresBackedIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,32 +15,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * End-to-end security-chain verification of the Phase 2 foundation:
- * public/protected split, envelope-shaped 401/403, BCrypt login through the
- * real filter chain, permission-based method security, and tenant isolation of
- * a read endpoint.
+ * End-to-end security-chain verification against PostgreSQL (Phase 3):
+ * public/protected split, envelope-shaped 401/403 with the Node reference
+ * backend's exact codes and messages, login through the real filter chain
+ * (token issuance + per-request database re-validation), permission-based
+ * method security, and tenant isolation of a read endpoint.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@org.springframework.test.context.ActiveProfiles("test")
-class SecurityChainIntegrationTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    private String login(String email, String password) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andReturn();
-        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
-        return node.get("data").get("accessToken").asText();
-    }
+class SecurityChainIntegrationTest extends PostgresBackedIntegrationTest {
 
     @Test
     void healthEndpointIsPublic() throws Exception {
@@ -57,7 +35,9 @@ class SecurityChainIntegrationTest {
         mockMvc.perform(get("/api/v1/facilities"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("Missing or malformed Authorization header or token query parameter."));
     }
 
     @Test
@@ -67,12 +47,22 @@ class SecurityChainIntegrationTest {
                         .content("{\"email\":\"admin@acmeglobal.com\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.user.role").value("COMPANY_ADMIN"))
-                .andExpect(jsonPath("$.data.user.organizationId").value("org-acme-corp"))
+                .andExpect(jsonPath("$.message").value("Success"))
+                .andExpect(jsonPath("$.data.user.id").value(SeedIds.USER_ACME_ADMIN))
+                .andExpect(jsonPath("$.data.user.email").value("admin@acmeglobal.com"))
+                .andExpect(jsonPath("$.data.user.fullName").value("Elena Rostova"))
+                .andExpect(jsonPath("$.data.user.organizationId").doesNotExist())
+                .andExpect(jsonPath("$.data.organization.id").value(SeedIds.ORG_ACME))
+                .andExpect(jsonPath("$.data.organization.name").value("Acme Global Manufacturing"))
+                .andExpect(jsonPath("$.data.role").value("COMPANY_ADMIN"))
+                .andExpect(jsonPath("$.data.permissions").isArray())
+                .andExpect(jsonPath("$.data.permissions").isNotEmpty())
+                .andExpect(jsonPath("$.data.memberships[0].organizationId").value(SeedIds.ORG_ACME))
                 .andReturn();
 
         JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
         assertFalse(node.get("data").get("accessToken").asText().isBlank());
+        assertFalse(node.get("data").get("refreshToken").asText().isBlank());
     }
 
     @Test
@@ -97,12 +87,12 @@ class SecurityChainIntegrationTest {
 
     @Test
     void holderOfPermissionPassesMethodSecurity() throws Exception {
-        String adminToken = login("admin@acmeglobal.com", "Password123!");
+        String adminToken = loginToken("admin@acmeglobal.com", "Password123!");
 
         mockMvc.perform(post("/api/v1/facilities")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Phase 2 Probe Facility\",\"facilityCode\":\"FAC-PROBE\"}"))
+                        .content("{\"name\":\"Phase 3 Probe Facility\",\"facilityCode\":\"FAC-PROBE3\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -110,7 +100,7 @@ class SecurityChainIntegrationTest {
     @Test
     void roleWithoutPermissionIsDeniedWithEnvelope403() throws Exception {
         // ASSURANCE_PROVIDER holds audits.review but not facilities.create.
-        String auditorToken = login("auditor@ey-assurance.com", "Password123!");
+        String auditorToken = loginToken("auditor@ey-assurance.com", "Password123!");
 
         mockMvc.perform(post("/api/v1/facilities")
                         .header("Authorization", "Bearer " + auditorToken)
@@ -123,30 +113,40 @@ class SecurityChainIntegrationTest {
 
     @Test
     void testSuiteEndpointIsRestrictedToPlatformAdministrators() throws Exception {
-        // Not public anymore: anonymous callers get 401, tenant admins get 403
-        // because COMPANY_ADMIN does not hold platform.tenants.manage.
+        // Not public: anonymous callers get 401, tenant admins get 403 because
+        // COMPANY_ADMIN does not hold platform.tenants.manage — and now, with the
+        // platform seed in place, a real PLATFORM_ADMIN can finally reach it.
         mockMvc.perform(get("/api/v1/test-suite/run"))
                 .andExpect(status().isUnauthorized());
 
-        String adminToken = login("admin@acmeglobal.com", "Password123!");
+        String adminToken = loginToken("admin@acmeglobal.com", "Password123!");
         mockMvc.perform(get("/api/v1/test-suite/run")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+        String platformToken = loginToken("platform.admin@carbonflow.test", "Password123!");
+        mockMvc.perform(get("/api/v1/test-suite/run")
+                        .header("Authorization", "Bearer " + platformToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
-    void invalidBearerTokenIsRejectedAsUnauthenticated() throws Exception {
+    void invalidBearerTokenIsRejectedAsInvalidToken() throws Exception {
+        // An explicit, parseable 401 (Node parity): not a silent pass-through.
         mockMvc.perform(get("/api/v1/facilities")
                         .header("Authorization", "Bearer completely.bogus.token"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.error.code").value("INVALID_TOKEN"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("Access token expired or signature invalid."));
     }
 
     @Test
     void facilityReadsAreScopedToTheCallersTenant() throws Exception {
-        String acmeToken = login("admin@acmeglobal.com", "Password123!");
-        String apexToken = login("admin@apexcorp.com", "Password123!");
+        String acmeToken = loginToken("admin@acmeglobal.com", "Password123!");
+        String apexToken = loginToken("admin@apexcorp.com", "Password123!");
 
         JsonNode acmeFacilities = readFacilities(acmeToken);
         JsonNode apexFacilities = readFacilities(apexToken);
@@ -155,9 +155,24 @@ class SecurityChainIntegrationTest {
         assertFalse(apexFacilities.isEmpty(), "expected a seeded facility for Apex");
 
         acmeFacilities.forEach(facility ->
-                assertEquals("org-acme-corp", facility.get("organizationId").asText()));
+                assertEquals(SeedIds.ORG_ACME, facility.get("organizationId").asText()));
         apexFacilities.forEach(facility ->
-                assertEquals("org-apex-cleantech", facility.get("organizationId").asText()));
+                assertEquals(SeedIds.ORG_APEX, facility.get("organizationId").asText()));
+    }
+
+    @Test
+    void tamperedSignatureAndExpiredStyleFailuresSurfaceAsInvalidToken() throws Exception {
+        // Flip a character of a real token so the signature no longer verifies.
+        String token = loginToken("admin@acmeglobal.com", "Password123!");
+        int midpoint = token.length() / 2;
+        char original = token.charAt(midpoint);
+        char flipped = original == 'A' ? 'B' : 'A';
+        String tampered = token.substring(0, midpoint) + flipped + token.substring(midpoint + 1);
+
+        mockMvc.perform(get("/api/v1/facilities")
+                        .header("Authorization", "Bearer " + tampered))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("INVALID_TOKEN"));
     }
 
     private JsonNode readFacilities(String token) throws Exception {

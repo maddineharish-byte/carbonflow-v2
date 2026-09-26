@@ -1,8 +1,17 @@
 package com.carbonflow.config;
 
 import com.carbonflow.model.enums.Role;
-import java.util.List;
 
+/**
+ * Thread-bound tenant context set by {@link JwtAuthenticationFilter} after it
+ * has re-validated the token against the database (user active, membership
+ * active for the token's organization). Controllers derive tenant scoping
+ * exclusively from this object — never from client input.
+ *
+ * <p>{@code facilityScopes} was removed with Phase 3: the V1 schema has no
+ * facility-scoping column, and nothing consumed the field (revisit with
+ * facility-level permissions, if that feature is ever specified).
+ */
 public class TenantContext {
     private static final ThreadLocal<TenantContext> CURRENT_CONTEXT = new ThreadLocal<>();
 
@@ -10,14 +19,12 @@ public class TenantContext {
     private final String userId;
     private final String email;
     private final Role role;
-    private final List<String> facilityScopes;
 
-    public TenantContext(String organizationId, String userId, String email, Role role, List<String> facilityScopes) {
+    public TenantContext(String organizationId, String userId, String email, Role role) {
         this.organizationId = organizationId;
         this.userId = userId;
         this.email = email;
         this.role = role;
-        this.facilityScopes = facilityScopes;
     }
 
     public static void set(TenantContext context) {
@@ -36,5 +43,4 @@ public class TenantContext {
     public String getUserId() { return userId; }
     public String getEmail() { return email; }
     public Role getRole() { return role; }
-    public List<String> getFacilityScopes() { return facilityScopes; }
 }
