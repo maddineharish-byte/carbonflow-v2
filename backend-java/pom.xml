@@ -18,7 +18,7 @@
     <description>Enterprise Carbon Accounting, GHG Protocol Dual-Reporting, and Audit Ledger Engine in Java (Spring Boot 3)</description>
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
         <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
@@ -60,11 +60,26 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Apache Commons CSV -->
+        <!-- PostgreSQL persistence: plain JDBC (ADR-009, no ORM) -->
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.11.0</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flyway migration runner (shared db/migration folder, V1..Vn) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Test -->
@@ -81,6 +96,21 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- Standard application resources -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+            <!-- Single source of truth for the schema: the repository-root db/migration
+                 folder (V1..Vn) is shared with deployment tooling and packaged onto the
+                 classpath so Flyway applies exactly the same files. -->
+            <resource>
+                <directory>${project.basedir}/../db/migration</directory>
+                <targetPath>db/migration</targetPath>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

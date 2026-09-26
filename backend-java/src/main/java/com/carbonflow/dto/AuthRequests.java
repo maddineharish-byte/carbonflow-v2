@@ -1,11 +1,14 @@
 package com.carbonflow.dto;
 
 import com.carbonflow.model.enums.Role;
+import jakarta.validation.constraints.NotBlank;
 
 public class AuthRequests {
 
     public static class LoginRequest {
+        @NotBlank(message = "email is required")
         private String email;
+        @NotBlank(message = "password is required")
         private String password;
 
         public String getEmail() { return email; }

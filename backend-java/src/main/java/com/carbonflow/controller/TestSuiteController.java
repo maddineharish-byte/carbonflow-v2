@@ -7,6 +7,7 @@ import com.carbonflow.model.enums.Scope2Method;
 import com.carbonflow.repository.DataStore;
 import com.carbonflow.service.GhgCalculationEngine;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +47,7 @@ public class TestSuiteController {
     }
 
     @GetMapping("/run")
+    @PreAuthorize("hasAuthority('PERMISSION_platform.tenants.manage')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> runTestSuite() {
         List<TestResultItem> results = new ArrayList<>();
 

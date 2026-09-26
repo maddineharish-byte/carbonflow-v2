@@ -6,6 +6,7 @@ import com.carbonflow.repository.DataStore;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +27,7 @@ public class ReportsController {
     }
 
     @GetMapping(value = "/export-csv", produces = "text/csv")
+    @PreAuthorize("hasAuthority('PERMISSION_reports.read')")
     public void exportInventoryCsv(HttpServletResponse response) throws IOException {
         TenantContext ctx = TenantContext.get();
         String orgId = ctx.getOrganizationId();

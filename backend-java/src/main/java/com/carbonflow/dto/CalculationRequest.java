@@ -1,10 +1,11 @@
 package com.carbonflow.dto;
 
-import java.math.BigDecimal;
-import java.util.Map;
+import jakarta.validation.constraints.NotBlank;
 
 public class CalculationRequest {
+    @NotBlank(message = "activityDataId is required")
     private String activityDataId;
+    @NotBlank(message = "emissionFactorId is required")
     private String emissionFactorId;
 
     public String getActivityDataId() { return activityDataId; }

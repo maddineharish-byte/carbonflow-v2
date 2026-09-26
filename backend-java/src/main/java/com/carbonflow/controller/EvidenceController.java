@@ -5,6 +5,7 @@ import com.carbonflow.dto.ApiResponse;
 import com.carbonflow.model.EvidenceItem;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class EvidenceController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('PERMISSION_evidence.read')")
     public ResponseEntity<ApiResponse<List<EvidenceItem>>> getEvidence() {
         TenantContext ctx = TenantContext.get();
         List<EvidenceItem> list = dataStore.evidenceItems.values().stream()
@@ -32,6 +34,7 @@ public class EvidenceController {
     }
 
     @PostMapping("/upload-mock")
+    @PreAuthorize("hasAuthority('PERMISSION_evidence.upload')")
     public ResponseEntity<ApiResponse<EvidenceItem>> uploadMockEvidence(@RequestBody EvidenceItem req) {
         TenantContext ctx = TenantContext.get();
         req.setId("evd-" + UUID.randomUUID().toString().substring(0, 8));

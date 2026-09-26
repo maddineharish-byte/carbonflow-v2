@@ -10,6 +10,7 @@ import com.carbonflow.model.enums.GHGScope;
 import com.carbonflow.model.enums.Scope2Method;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,6 +31,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/dashboard")
+    @PreAuthorize("hasAuthority('PERMISSION_analytics.read')")
     public ResponseEntity<ApiResponse<DashboardSummaryDto>> getDashboardSummary() {
         TenantContext ctx = TenantContext.get();
         String orgId = ctx.getOrganizationId();
@@ -158,6 +160,7 @@ public class AnalyticsController {
     }
 
     @PostMapping("/trend-insights")
+    @PreAuthorize("hasAuthority('PERMISSION_analytics.read')")
     public ResponseEntity<ApiResponse<TrendInsightsDto>> getTrendInsights() {
         TrendInsightsDto.Summary summary = new TrendInsightsDto.Summary(
                 "Decoupling Acceleration: Scope 2 Market Decoupling Drives 45.4% Net Reduction",

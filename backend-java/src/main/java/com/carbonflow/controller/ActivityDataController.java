@@ -5,6 +5,7 @@ import com.carbonflow.dto.ApiResponse;
 import com.carbonflow.model.ActivityData;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class ActivityDataController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('PERMISSION_activity_data.read')")
     public ResponseEntity<ApiResponse<List<ActivityData>>> getActivityData() {
         TenantContext ctx = TenantContext.get();
         List<ActivityData> list = dataStore.activityData.values().stream()
@@ -32,6 +34,7 @@ public class ActivityDataController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('PERMISSION_activity_data.create')")
     public ResponseEntity<ApiResponse<ActivityData>> createActivityData(@RequestBody ActivityData req) {
         TenantContext ctx = TenantContext.get();
         req.setId("act-" + UUID.randomUUID().toString().substring(0, 8));

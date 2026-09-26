@@ -7,6 +7,7 @@ import com.carbonflow.model.enums.AuditStatus;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class AuditController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('PERMISSION_audits.read')")
     public ResponseEntity<ApiResponse<List<AuditRoom>>> getAuditRooms() {
         TenantContext ctx = TenantContext.get();
         List<AuditRoom> list = dataStore.auditRooms.values().stream()
@@ -33,6 +35,7 @@ public class AuditController {
     }
 
     @PatchMapping("/{roomId}/checklist/{itemId}")
+    @PreAuthorize("hasAuthority('PERMISSION_audits.review')")
     public ResponseEntity<ApiResponse<AuditRoom.ChecklistItem>> toggleChecklistItem(
             @PathVariable String roomId,
             @PathVariable String itemId,
@@ -58,6 +61,9 @@ public class AuditController {
     }
 
     @PostMapping("/{roomId}/transition")
+    // State transitions carry governance weight: submit, approve and lock rights
+    // are required. Fine-grained per-target-state checks arrive with Phase 5.
+    @PreAuthorize("hasAnyAuthority('PERMISSION_audits.submit','PERMISSION_audits.approve','PERMISSION_audits.lock')")
     public ResponseEntity<ApiResponse<AuditRoom>> transitionStatus(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body) {

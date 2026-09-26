@@ -2,7 +2,8 @@ package com.carbonflow.repository;
 
 import com.carbonflow.model.*;
 import com.carbonflow.model.enums.*;
-import org.springframework.stereotype.Repository;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -11,8 +12,29 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-@Repository
+/**
+ * In-memory store backing the pre-persistence prototype controllers until the
+ * JDBC repositories land (Phase 3+).
+ *
+ * <p>Deliberately annotated {@code @Component}, NOT {@code @Repository}: with
+ * spring-boot-starter-jdbc present, {@code @Repository} beans get a CGLIB
+ * exception-translation proxy created without running constructors, which would
+ * null out the public field maps that controllers read directly.
+ */
+@Component
 public class DataStore {
+
+    /**
+     * Seed credentials are hashed with the same algorithm and cost as the login
+     * check (BCrypt cost 10 — identical to bcryptjs cost 10 in the Node
+     * reference backend). No plaintext credential is stored anywhere.
+     */
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder(10);
+
+    private static String hash(String rawPassword) {
+        return PASSWORD_ENCODER.encode(rawPassword);
+    }
+
 
     public final Map<String, Organization> organizations = new ConcurrentHashMap<>();
     public final Map<String, User> users = new ConcurrentHashMap<>();
@@ -37,11 +59,11 @@ public class DataStore {
         organizations.put(acme.getId(), acme);
         organizations.put(apex.getId(), apex);
 
-        // 2. Users
-        User adminAcme = new User("usr-acme-admin", "admin@acmeglobal.com", "Password123!", "Elena Rostova", acme.getId(), Role.SUPER_ADMIN, List.of(), true, Instant.now());
-        User mgrAcme = new User("usr-acme-mgr", "manager@acmeglobal.com", "Password123!", "Marcus Vance", acme.getId(), Role.SUSTAINABILITY_MANAGER, List.of(), true, Instant.now());
-        User auditor = new User("usr-auditor-1", "auditor@ey-assurance.com", "Password123!", "Sarah Jenkins (EY Auditor)", acme.getId(), Role.AUDITOR, List.of(), true, Instant.now());
-        User adminApex = new User("usr-apex-admin", "admin@apexcorp.com", "Password123!", "David Chen", apex.getId(), Role.SUPER_ADMIN, List.of(), true, Instant.now());
+        // 2. Users (canonical roles; demo password stored only as a BCrypt hash)
+        User adminAcme = new User("usr-acme-admin", "admin@acmeglobal.com", hash("Password123!"), "Elena Rostova", acme.getId(), Role.COMPANY_ADMIN, List.of(), true, Instant.now());
+        User mgrAcme = new User("usr-acme-mgr", "manager@acmeglobal.com", hash("Password123!"), "Marcus Vance", acme.getId(), Role.SUSTAINABILITY_MANAGER, List.of(), true, Instant.now());
+        User auditor = new User("usr-auditor-1", "auditor@ey-assurance.com", hash("Password123!"), "Sarah Jenkins (EY Auditor)", acme.getId(), Role.ASSURANCE_PROVIDER, List.of(), true, Instant.now());
+        User adminApex = new User("usr-apex-admin", "admin@apexcorp.com", hash("Password123!"), "David Chen", apex.getId(), Role.COMPANY_ADMIN, List.of(), true, Instant.now());
 
         users.put(adminAcme.getId(), adminAcme);
         users.put(mgrAcme.getId(), mgrAcme);

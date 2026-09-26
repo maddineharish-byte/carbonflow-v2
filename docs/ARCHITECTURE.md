@@ -68,7 +68,8 @@ CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separat
 | Component | Technology | Specification / Standard |
 | :--- | :--- | :--- |
 | **Frontend** | React 19 + TypeScript | Vite, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
-| **API Server** | Node.js (TypeScript / Express) | RESTful JSON, RFC 7519 JWT, RFC 6749 Refresh Tokens |
+| **API Server (active)** | Node.js (TypeScript / Express) | RESTful JSON, RFC 7519 JWT, RFC 6749 Refresh Tokens |
+| **API Server (target)** | Java 21 + Spring Boot 3 (Maven, `backend-java/`) | Spring Security JWT + RBAC (9 roles × 44 permissions), plain JDBC — no ORM (ADR-009), Flyway, Controller → Service → Repository; converges to the active API contract before cutover (ADR-010) |
 | **Calculation Engine** | Deterministic Decimal (Decimal.js) | Emulates Java `BigDecimal`, 8-decimal precision, ROUND_HALF_UP |
 | **Relational Database** | PostgreSQL | Schema migrations with Flyway naming standard (`V1__...`, `V2__...`) |
 | **Storage** | Pluggable (Local / Supabase) | Multi-part uploads, SHA-256 hashing, 25 MB file limit |

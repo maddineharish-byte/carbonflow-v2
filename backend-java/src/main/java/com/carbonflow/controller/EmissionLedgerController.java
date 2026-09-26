@@ -5,6 +5,7 @@ import com.carbonflow.dto.ApiResponse;
 import com.carbonflow.model.EmissionRecord;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,6 +22,7 @@ public class EmissionLedgerController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('PERMISSION_reports.read')")
     public ResponseEntity<ApiResponse<List<EmissionRecord>>> getEmissionRecords() {
         TenantContext ctx = TenantContext.get();
         List<EmissionRecord> list = dataStore.emissionRecords.values().stream()

@@ -1,6 +1,6 @@
 # CarbonFlow
 
-CarbonFlow is a multi-tenant greenhouse-gas accounting and audit application with a React/Vite frontend and an Express/TypeScript API.
+CarbonFlow is a multi-tenant greenhouse-gas accounting and audit application with a React/Vite frontend. The **active** API is Express/TypeScript; the **target** API is Java 21 + Spring Boot (`backend-java/`), converging to the same contract before cutover.
 
 ## Current architecture
 
@@ -8,6 +8,7 @@ CarbonFlow is a multi-tenant greenhouse-gas accounting and audit application wit
 - Evidence file bytes use the private local storage adapter; PostgreSQL stores metadata and tenant-owned associations, not file content.
 - Audits, inventory, targets, projects, and organization settings remain in their existing process-local paths pending later tasks.
 - The frontend is a single authenticated application shell with state-based view navigation.
+- The target backend (`backend-java/`, Java 21 + Spring Boot) is under construction at Phase 2 (foundation complete: ADRs, Flyway runner, RBAC, JWT hardening, 36 tests). It does not serve the frontend yet. See `backend-java/README.md` and ADR-009–013 in `docs/DECISIONS.md`.
 
 ## Prerequisites
 
@@ -41,8 +42,9 @@ Existing migration files are in `db/migration/`:
 - `V4__scope_constraints.sql`
 - `V5__activity_evidence_tenant_integrity.sql`
 - `V6__calculation_emission_integrity.sql`
+- `V7__audit_status_correction_rejection.sql` — widens `carbon_audits.status` from 8 to the canonical 10 audit states so `CORRECTION_REQUESTED`/`REJECTED` can be persisted (ADR-012)
 
-The current repository has no production migration runner. Apply and verify migrations through the deployment tooling before starting the application.
+The Node backend has no migration runner: apply and verify migrations through the deployment tooling before starting the application. The Java backend runs these same files with Flyway at startup (for a database already migrated manually through V6 it baselines at 6 and applies only newer migrations — ADR-012).
 
 ## Run locally
 

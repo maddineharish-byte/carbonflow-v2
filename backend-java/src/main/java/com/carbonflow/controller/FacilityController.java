@@ -5,6 +5,7 @@ import com.carbonflow.dto.ApiResponse;
 import com.carbonflow.model.Facility;
 import com.carbonflow.repository.DataStore;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class FacilityController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('PERMISSION_facilities.read')")
     public ResponseEntity<ApiResponse<List<Facility>>> getFacilities() {
         TenantContext ctx = TenantContext.get();
         List<Facility> list = dataStore.facilities.values().stream()
@@ -32,6 +34,7 @@ public class FacilityController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('PERMISSION_facilities.create')")
     public ResponseEntity<ApiResponse<Facility>> createFacility(@RequestBody Facility req) {
         TenantContext ctx = TenantContext.get();
         req.setId("fac-" + UUID.randomUUID().toString().substring(0, 8));

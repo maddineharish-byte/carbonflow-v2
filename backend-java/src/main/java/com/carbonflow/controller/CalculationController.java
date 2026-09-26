@@ -8,8 +8,10 @@ import com.carbonflow.model.Calculation;
 import com.carbonflow.model.EmissionFactor;
 import com.carbonflow.repository.DataStore;
 import com.carbonflow.service.GhgCalculationEngine;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,12 +30,14 @@ public class CalculationController {
     }
 
     @GetMapping("/factors")
+    @PreAuthorize("hasAuthority('PERMISSION_emission_factors.read')")
     public ResponseEntity<ApiResponse<List<EmissionFactor>>> getEmissionFactors() {
         return ResponseEntity.ok(ApiResponse.ok(List.copyOf(dataStore.emissionFactors.values())));
     }
 
     @PostMapping("/calculations/run")
-    public ResponseEntity<ApiResponse<Calculation>> runCalculation(@RequestBody CalculationRequest req) {
+    @PreAuthorize("hasAuthority('PERMISSION_calculations.create')")
+    public ResponseEntity<ApiResponse<Calculation>> runCalculation(@Valid @RequestBody CalculationRequest req) {
         TenantContext ctx = TenantContext.get();
 
         ActivityData act = dataStore.activityData.get(req.getActivityDataId());
