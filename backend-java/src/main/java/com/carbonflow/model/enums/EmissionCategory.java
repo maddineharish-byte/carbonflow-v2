@@ -1,0 +1,12 @@
+package com.carbonflow.model.enums;
+
+public enum EmissionCategory {
+    STATIONARY_COMBUSTION,
+    MOBILE_COMBUSTION,
+    FUGITIVE_EMISSIONS,
+    ELECTRICITY_LOCATION,
+    ELECTRICITY_MARKET,
+    PURCHASED_GOODS_SERVICES,
+    BUSINESS_TRAVEL,
+    COMMUTING
+}

@@ -1,0 +1,6 @@
+{
+  "name": "CarbonFlow",
+  "description": "Enterprise Carbon Accounting, GHG Management, Audit Preparation, Evidence Management, Inventory, Analytics, Targets & Reduction Projects SaaS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
