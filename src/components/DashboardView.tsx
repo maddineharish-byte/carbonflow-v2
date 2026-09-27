@@ -251,7 +251,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
       </div>
 
       {/* Dual Reporting Highlight Box */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-850 border border-slate-800 rounded-xl p-6 shadow-sm">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border border-slate-800 rounded-xl p-6 shadow-sm">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
           Dual-Reporting Totals (Non-Aggregated Presentation)
         </div>

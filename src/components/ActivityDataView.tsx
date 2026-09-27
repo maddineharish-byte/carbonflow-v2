@@ -133,7 +133,7 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-850 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3">Facility</th>
                 <th className="px-4 py-3">Scope & Category</th>
@@ -147,7 +147,7 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filtered.map((act) => (
-                <tr key={act.id} className="hover:bg-slate-850/50 transition">
+                <tr key={act.id} className="hover:bg-slate-800/50 transition">
                   <td className="px-4 py-3 font-medium text-white">{act.facilityName}</td>
                   <td className="px-4 py-3">
                     <span

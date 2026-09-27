@@ -103,7 +103,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ activities }) => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-850 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3">Facility</th>
                 <th className="px-4 py-3">Scope & Source</th>
@@ -119,7 +119,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ activities }) => {
               {calculatedItems.map((act) => {
                 const calc = act.calculation!;
                 return (
-                  <tr key={act.id} className="hover:bg-slate-850/50 transition">
+                  <tr key={act.id} className="hover:bg-slate-800/50 transition">
                     <td className="px-4 py-3 font-semibold text-white">{act.facilityName}</td>
                     <td className="px-4 py-3">
                       <span
@@ -190,7 +190,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ activities }) => {
 
               {/* Mathematical Equation Trace */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-850 rounded-lg border border-slate-800 space-y-1">
+                <div className="p-3 bg-slate-800 rounded-lg border border-slate-800 space-y-1">
                   <div className="text-slate-400 font-medium">Activity Input</div>
                   <div className="font-mono text-white text-sm">
                     {selectedCalc.act.quantity.toLocaleString()} {selectedCalc.act.unit}
@@ -198,7 +198,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ activities }) => {
                   <div className="text-[11px] text-slate-500">Source: {selectedCalc.act.source}</div>
                 </div>
 
-                <div className="p-3 bg-slate-850 rounded-lg border border-slate-800 space-y-1">
+                <div className="p-3 bg-slate-800 rounded-lg border border-slate-800 space-y-1">
                   <div className="text-slate-400 font-medium">Factor Reference</div>
                   <div className="font-mono text-white text-sm">{selectedCalc.calc.factorSource}</div>
                   <div className="text-[11px] text-slate-500">
@@ -210,7 +210,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ activities }) => {
               {/* GHG Breakdown by Gas */}
               <div className="space-y-2">
                 <div className="font-semibold text-white">Individual Gas Breakdown & GWP Multipliers</div>
-                <table className="w-full text-left bg-slate-850 rounded-lg overflow-hidden">
+                <table className="w-full text-left bg-slate-900 rounded-lg overflow-hidden">
                   <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase">
                     <tr>
                       <th className="px-3 py-2">Gas</th>

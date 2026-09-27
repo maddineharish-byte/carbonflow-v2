@@ -128,7 +128,7 @@ export const BoundariesView: React.FC<BoundariesViewProps> = ({
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-850 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Facility Name</th>
@@ -140,7 +140,7 @@ export const BoundariesView: React.FC<BoundariesViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800">
               {facilities.map((fac) => (
-                <tr key={fac.id} className="hover:bg-slate-850/50 transition">
+                <tr key={fac.id} className="hover:bg-slate-800/50 transition">
                   <td className="px-4 py-3 font-mono font-medium text-emerald-400">{fac.facilityCode}</td>
                   <td className="px-4 py-3 font-semibold text-white">{fac.name}</td>
                   <td className="px-4 py-3">

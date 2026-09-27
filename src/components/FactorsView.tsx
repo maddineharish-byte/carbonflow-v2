@@ -89,7 +89,7 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-850 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3">Scope</th>
                 <th className="px-4 py-3">Activity Type</th>
@@ -105,7 +105,7 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
               {emissionFactors.map((f) => {
                 const activeVersion = f.versions?.find((v: any) => v.status === 'ACTIVE') || f.versions?.[0];
                 return (
-                  <tr key={f.id} className="hover:bg-slate-850/50 transition">
+                  <tr key={f.id} className="hover:bg-slate-800/50 transition">
                     <td className="px-4 py-3">
                       <span
                         className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${

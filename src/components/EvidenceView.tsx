@@ -123,7 +123,7 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-850 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3">Document Name</th>
                 <th className="px-4 py-3">File Size</th>
@@ -135,7 +135,7 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
             </thead>
             <tbody className="divide-y divide-slate-800">
               {evidence.map((file) => (
-                <tr key={file.id} className="hover:bg-slate-850/50 transition">
+                <tr key={file.id} className="hover:bg-slate-800/50 transition">
                   <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
                     <FileText className="w-4 h-4 text-sky-400 shrink-0" />
                     <span>{file.fileName}</span>

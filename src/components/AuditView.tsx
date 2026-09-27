@@ -216,7 +216,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
 
             <div className="divide-y divide-slate-800 max-h-[500px] overflow-y-auto">
               {audit.checklist.map((item) => (
-                <div key={item.id} className="p-3.5 hover:bg-slate-850/50 transition flex items-start gap-3">
+                <div key={item.id} className="p-3.5 hover:bg-slate-800/50 transition flex items-start gap-3">
                   <input
                     type="checkbox"
                     id={`chk-${item.id}`}
@@ -241,7 +241,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
             </div>
           </div>
 
-          <div className="p-3 bg-slate-850 border-t border-slate-800 text-[11px] text-slate-400">
+          <div className="p-3 bg-slate-800 border-t border-slate-800 text-[11px] text-slate-400">
             Rule: 100% of mandatory checklist items must be satisfied before transitioning to APPROVED.
           </div>
         </div>
@@ -305,7 +305,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
 
             <div className="p-4 space-y-3 max-h-56 overflow-y-auto">
               {audit.comments.map((c, i) => (
-                <div key={i} className="p-2.5 bg-slate-850 rounded-lg border border-slate-800 text-xs space-y-1">
+                <div key={i} className="p-2.5 bg-slate-800 rounded-lg border border-slate-800 text-xs space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-semibold text-slate-200">
                       {c.userName} ({c.userRole})

@@ -38,7 +38,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ targets, projects }) =
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-center py-2 bg-slate-850 rounded-lg border border-slate-800 text-xs">
+            <div className="grid grid-cols-3 gap-3 text-center py-2 bg-slate-800 rounded-lg border border-slate-800 text-xs">
               <div>
                 <div className="text-slate-400 text-[11px]">Baseline</div>
                 <div className="text-white font-bold font-mono mt-0.5">{target.baselineValueT} t</div>
@@ -59,7 +59,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ targets, projects }) =
                 <span>Decarbonization Trajectory</span>
                 <span className="font-semibold text-white">45% Realized</span>
               </div>
-              <div className="w-full bg-slate-850 rounded-full h-2 overflow-hidden border border-slate-700">
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
                 <div className="bg-gradient-to-r from-emerald-500 to-sky-400 h-2 rounded-full w-[45%]" />
               </div>
             </div>
@@ -83,7 +83,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ targets, projects }) =
 
         <div className="divide-y divide-slate-800">
           {projects.map((p) => (
-            <div key={p.id} className="p-4 hover:bg-slate-850/50 transition flex flex-col md:flex-row justify-between gap-4">
+            <div key={p.id} className="p-4 hover:bg-slate-800/50 transition flex flex-col md:flex-row justify-between gap-4">
               <div className="space-y-1 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm">{p.name}</span>

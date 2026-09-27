@@ -85,7 +85,7 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
 
         <div className="divide-y divide-slate-800">
           {testSuiteData?.results.map((test) => (
-            <div key={test.id} className="p-4 hover:bg-slate-850/50 transition flex items-start gap-4">
+            <div key={test.id} className="p-4 hover:bg-slate-800/50 transition flex items-start gap-4">
               <div className="mt-0.5">
                 {test.passed ? (
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
