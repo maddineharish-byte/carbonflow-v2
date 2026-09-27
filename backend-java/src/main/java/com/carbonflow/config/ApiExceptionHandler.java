@@ -53,6 +53,19 @@ public class ApiExceptionHandler {
                 "Invalid value for parameter '" + ex.getName() + "'.");
     }
 
+    /**
+     * Upload larger than the 25 MB ceiling — rejected by the multipart layer
+     * before the controller runs. Enveloped as 400 UPLOAD_FAILED with Node's
+     * storage-service wording (the Node multer path surfaces through Express
+     * error middleware, so only the wording differs — ADR-016).
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUpload(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        return error(HttpStatus.BAD_REQUEST, "UPLOAD_FAILED",
+                "File size exceeds the 25 MB limit.");
+    }
+
     /** Wrong HTTP verb for an existing path. */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {

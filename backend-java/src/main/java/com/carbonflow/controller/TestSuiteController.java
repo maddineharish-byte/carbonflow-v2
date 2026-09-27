@@ -1,7 +1,6 @@
 package com.carbonflow.controller;
 
 import com.carbonflow.dto.ApiResponse;
-import com.carbonflow.model.enums.AuditStatus;
 import com.carbonflow.model.enums.GHGScope;
 import com.carbonflow.model.enums.Scope2Method;
 import com.carbonflow.repository.DataStore;
@@ -86,15 +85,20 @@ public class TestSuiteController {
         results.add(new TestResultItem("CALC-S2D-01", "DUAL_REPORTING", "Scope 2 Dual-Reporting Segregation", pass5,
                 "Scope 2 Location-based and Market-based methodologies reported strictly side-by-side in compliance with GHG Protocol."));
 
-        // Test 6: Mandatory Checklist Guard
-        boolean pass6 = dataStore.auditRooms.values().stream()
-                .anyMatch(r -> r.getChecklist().stream().anyMatch(c -> c.isMandatory() && !c.isCompleted()));
-        results.add(new TestResultItem("AUD-WFL-01", "AUDIT_WORKFLOW", "Mandatory Checklist Transition Guard", pass6,
-                "Approval correctly blocked when mandatory compliance checklist items are pending resolution."));
+        // Test 6: Canonical state-machine transition guard (Phase 5). The
+        // mandatory-checklist and finding gates live in AuditService and are
+        // exercised by the integration suite; this self-test asserts the
+        // ten-state machine itself rejects skipped and terminal-state moves.
+        boolean pass6 = !com.carbonflow.service.AuditStateMachine.isAllowed("DRAFT", "APPROVED")
+                && !com.carbonflow.service.AuditStateMachine.isAllowed("REVIEW", "AUDIT_READY")
+                && !com.carbonflow.service.AuditStateMachine.isAllowed("LOCKED", "REVIEW")
+                && com.carbonflow.service.AuditStateMachine.isAllowed("REVIEW", "APPROVED");
+        results.add(new TestResultItem("AUD-WFL-01", "AUDIT_WORKFLOW", "Canonical Audit Transition Guard", pass6,
+                "Ten-state machine rejects skipped and post-lock transitions (DRAFT -> APPROVED, REVIEW -> AUDIT_READY, LOCKED -> REVIEW) while permitting governed ones (REVIEW -> APPROVED); checklist and finding prerequisites are enforced server-side."));
 
         // Test 7: Evidence SHA-256 Integrity Seal
         results.add(new TestResultItem("EVD-SEC-01", "EVIDENCE_INTEGRITY", "Evidence SHA-256 Checksum Validation", true,
-                "Evidence vault records bound with immutable cryptographic SHA-256 checksums."));
+                "Evidence vault records carry SHA-256 integrity digests of the exact stored bytes."));
 
         long passed = results.stream().filter(r -> r.passed).count();
         Map<String, Object> data = new HashMap<>();

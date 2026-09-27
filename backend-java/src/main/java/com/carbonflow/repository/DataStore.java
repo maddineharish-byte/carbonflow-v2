@@ -35,7 +35,6 @@ public class DataStore {
     public final Map<String, Calculation> calculations = new ConcurrentHashMap<>();
     public final Map<String, EmissionRecord> emissionRecords = new ConcurrentHashMap<>();
     public final Map<String, EvidenceItem> evidenceItems = new ConcurrentHashMap<>();
-    public final Map<String, AuditRoom> auditRooms = new ConcurrentHashMap<>();
     public final List<AuditTrailEvent> auditTrail = Collections.synchronizedList(new ArrayList<>());
 
     public DataStore() {
@@ -91,15 +90,8 @@ public class DataStore {
         seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efRefrig, new BigDecimal("45"), "KG", new BigDecimal("93.960"), "calc-4");
         seedAcmeRecords(acmeOrgId, facDet.getId(), rp2024.getId(), efGridLoc, new BigDecimal("1250000"), "kWh", new BigDecimal("499.98375"), "calc-5");
         seedAcmeRecords(acmeOrgId, facAtx.getId(), rp2024.getId(), efGridMkt, new BigDecimal("820000"), "kWh", BigDecimal.ZERO, "calc-6");
-
-        // 7. Audit Room
-        AuditRoom room = new AuditRoom("audit-acme-2024", acmeOrgId, rp2024.getId(), "FY2024 ISO 14064-3 Third-Party Assurance", AuditStatus.READY_FOR_VERIFICATION, "auditor@ey-assurance.com", Instant.now());
-        room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-01", "Boundary definition validated under Operational Control criteria", true, true));
-        room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-02", "Scope 2 Dual-Reporting verified (Location-based vs Market-based)", true, true));
-        room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-03", "Refrigerant mass-balance leak records reconciled with maintenance invoices", true, true));
-        room.getChecklist().add(new AuditRoom.ChecklistItem("CHK-04", "Independent verification of REC retirement certificates on registry", false, true));
-
-        auditRooms.put(room.getId(), room);
+        // Audit seeds moved to PostgreSQL with Phase 5: carbon_audits is the
+        // only audit store; the prototype /audit-rooms mock is gone.
     }
 
     private void seedAcmeRecords(String orgId, String facilityId, String periodId, EmissionFactor factor, BigDecimal qty, String unit, BigDecimal tonnes, String calcId) {

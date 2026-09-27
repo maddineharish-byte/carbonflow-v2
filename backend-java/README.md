@@ -2,8 +2,8 @@
 
 This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, Maven, Spring Security (JWT), PostgreSQL, Flyway, REST, Controller → Service → Repository. It **supersedes** the Node/Express backend at cutover (Phase 10); until then the Node backend remains the live implementation and the authoritative API contract (ADR-010).
 
-> **Status: Phase 4 (Scope & Structure) complete — Phase 5 (Governance & Audit) next.**
-> Historical note: this directory began as a prototype. Phases 1–4 remediated its role model, security, and configuration, moved identity (organizations, users, memberships, refresh tokens) to PostgreSQL, and moved the scope domain (legal entities, facilities, departments, reporting periods, organizational boundaries) to PostgreSQL; the remaining domains are still served from memory until their phase. Treat every claim in this file as the current, verified state — older claims ("matches 100% of the API contract", Dockerfile, "Automated Compliance Verification") were false and have been removed.
+> **Status: Phase 5 (Governance & Audit) complete — Phase 6 next.**
+> Historical note: this directory began as a prototype. Phases 1–5 remediated its role model, security, and configuration, moved identity (organizations, users, memberships, refresh tokens), the scope domain (legal entities, facilities, departments, reporting periods, organizational boundaries), and the governance/evidence domain (audits, checklist, review desk, evidence vault) to PostgreSQL; the remaining domains are still served from memory until their phase. Treat every claim in this file as the current, verified state — older claims ("matches 100% of the API contract", Dockerfile, "Automated Compliance Verification") were false and have been removed.
 
 ---
 
@@ -15,11 +15,11 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | Framework | Spring Boot 3.3.3, Maven 3.9+ | REST, Controller → Service → Repository |
 | Security | Spring Security 6, stateless JWT (JJWT, HS256) | fail-closed secret, 15-minute access tokens |
 | Authorization | RBAC: 9 roles × 44 permissions via `@PreAuthorize` | ported from `server/rbac.ts`, parity-tested (ADR-011) |
-| Persistence | Plain JDBC (`spring-boot-starter-jdbc`) + PostgreSQL | **no ORM** (ADR-009); identity + scope domain JDBC-backed since Phases 3–4, other domains migrate in their phases |
-| Migrations | Flyway; single source `db/migration` (V1–V8) packaged onto the classpath | baseline strategy in ADR-012; run on every `mvn verify` against an embedded test PostgreSQL; **Phase 4 required no new migration** (ADR-015) |
+| Persistence | Plain JDBC (`spring-boot-starter-jdbc`) + PostgreSQL | **no ORM** (ADR-009); identity (Phase 3), scope (Phase 4) and governance + evidence (Phase 5) are JDBC-backed, other domains migrate in their phases |
+| Migrations | Flyway; single source `db/migration` (V1–V8) packaged onto the classpath | baseline strategy in ADR-012; run on every `mvn verify` against an embedded test PostgreSQL; **Phases 4–5 required no new migration** (ADR-015, ADR-016) |
 | Passwords | BCrypt cost 10 | identical to the Node backend's bcryptjs cost 10 |
 
-**Identity and scope are database-backed; the rest is still in memory.** `organizations`, `users`, `organization_memberships`, `refresh_tokens` (ADR-014) and `legal_entities`, `facilities`, `departments`, `reporting_periods`, `organizational_boundaries`, `boundary_facilities` (ADR-015) are served by JDBC repositories over PostgreSQL. All other domains (activity data, factors, calculations, …) remain in the in-memory `repository/DataStore` and are lost on restart until their phase migrates them — its facility/period copies now exist **only** as fixtures for the prototype analytics/reports mocks.
+**Identity, scope, and governance are database-backed; the rest is still in memory.** `organizations`, `users`, `organization_memberships`, `refresh_tokens` (ADR-014), `legal_entities`, `facilities`, `departments`, `reporting_periods`, `organizational_boundaries`, `boundary_facilities` (ADR-015) and `carbon_audits`, `audit_checklist_items`, `review_findings`, `review_comments`, `correction_requests`, `audit_approvals`, `audit_lock_events`, `evidence_records`, `evidence_versions`, `evidence_links` (ADR-016) are served by JDBC repositories over PostgreSQL. All other domains (activity data, factors, calculations, …) remain in the in-memory `repository/DataStore` and are lost on restart until their phase migrates them — its facility/period copies now exist **only** as fixtures for the prototype analytics/reports mocks.
 
 ---
 
@@ -38,10 +38,10 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | Flyway runner + `V7` audit-state + `V8` org lifecycle | **Implemented** — V1–V8 run on every build against embedded PostgreSQL 14.10; V7–V8 baselined + applied on **live PostgreSQL 18.6** (`carbonflow_dev`) on 2026-09-26, app health verified against it |
 | Scope structure: `GET/POST /facilities`, `/legal-entities`, `/departments`, `/reporting-periods`, `/boundaries` + get/update/delete verbs + boundary membership | **Implemented** (JDBC, Node contract + greenfield verbs; tenant-scoped, `ScopeService` IDOR choke point, ADR-015) |
 | Data endpoints (activity-data, emissions, factors, calculations, dashboard, CSV export) | **Partial** — remaining paths being converged to the Node contract (ADR-010); served from memory until Phases 6–7 |
-| Audit workflow (`/audit-rooms`, 6-state enum) | **Legacy** — must be replaced by the canonical 10-state machine in Phase 5 |
-| Evidence upload | **Mocked** (`/evidence/upload-mock` takes no bytes, never hashes) |
-| Persistence (JDBC repositories) | **Partial** — identity + org lifecycle (Phase 3) + scope domain (Phase 4); remaining domains migrate in Phases 5–7 |
-| Tests | **132 tests** (JUnit 5): RBAC parity, JWT, security chain, refresh rotation/replay, switch-tenant, registration lifecycle, user admin, org current, plus facility/legal-entity/department/reporting-period/boundary CRUD, cross-tenant IDOR rejection, scope allow/deny matrix — all against embedded PostgreSQL |
+| Audit workflow (10-state machine, checklist, review desk, governed lock) | **Implemented** (JDBC; canonical V7 states, per-edge permission + server-side gates in `AuditStateMachine`, legacy `/audit-rooms` model deleted, ADR-016) |
+| Evidence vault (records, versions, links, download) | **Implemented** (JDBC metadata + private local files; Node's FILE_MISSING → relationship → 25 MB → MIME → magic → SHA-256 chain, cleanup on failure, `storagePath` never serialized, ADR-016) |
+| Persistence (JDBC repositories) | **Partial** — identity + org lifecycle (Phase 3), scope domain (Phase 4), governance + evidence (Phase 5); remaining domains migrate in Phases 6–7 |
+| Tests | **176 tests** (JUnit 5): RBAC parity, JWT, security chain, refresh rotation/replay, switch-tenant, registration lifecycle, user admin, org current, scope CRUD/IDOR/allow-deny, plus 44 Phase 5 tests (exhaustive state-machine parity, audit lifecycle, checklist, review desk, evidence chain + IDOR, governed lock) — all against embedded PostgreSQL |
 
 ---
 
@@ -113,9 +113,9 @@ The canonical role set is the 9 roles of `server/types.ts` / V2 seed — there i
 
 ---
 
-## Security posture after Phase 4
+## Security posture after Phase 5
 
-Fixed: plaintext password comparison · zero authorization · committed JWT secret · CORS `*` + credentials · unauthenticated self-test · envelope-incomplete error responses · silent token failures · CGLIB-proxy field-nulling trap (ADR-013) · refresh-token rotation with replay detection (replayed token now revokes the whole family — deliberate strengthening over Node) · logout session invalidation · DB-backed per-request identity validation (ADR-014) · **tenant-scoped scope domain — every scope statement carries `organization_id = ?`, client-supplied ids resolve through one choke point (`ScopeService`), malformed/cross-tenant ids are indistinguishable 404s, and cross-tenant boundary↔facility pairing is rejected with nothing persisted (ADR-015)**.
+Fixed: plaintext password comparison · zero authorization · committed JWT secret · CORS `*` + credentials · unauthenticated self-test · envelope-incomplete error responses · silent token failures · CGLIB-proxy field-nulling trap (ADR-013) · refresh-token rotation with replay detection (replayed token now revokes the whole family — deliberate strengthening over Node) · logout session invalidation · DB-backed per-request identity validation (ADR-014) · **tenant-scoped scope domain — every scope statement carries `organization_id = ?`, client-supplied ids resolve through one choke point (`ScopeService`), malformed/cross-tenant ids are indistinguishable 404s, and cross-tenant boundary↔facility pairing is rejected with nothing persisted (ADR-015)** · **governance + evidence (ADR-016) — every Phase 5 query is tenant-predicated (child statements re-join through `carbon_audits`), malformed/unknown/cross-tenant ids are indistinguishable 404s across audits, checklist items, findings, comments, corrections and evidence (records/versions/links/download), all writes are RBAC-gated on the frozen codes, uploads enforce 25 MB + MIME allow-list + magic bytes + SHA-256 with file cleanup on any failed write, `storagePath` is never serialized, and a `LOCKED` audit answers 409 `AUDIT_LOCKED` for every governed write (governed lock = SHA-256 integrity checksum, not cryptographic immutability)**.
 
 Still open (tracked, not fixed here): `?token=` query-string acceptance · login throttling/lockout (Phase 9) · DB TLS (Phase 9) · demo seeds on non-dev databases (opt-in flag exists; cutover review Phase 10).
 
@@ -129,7 +129,8 @@ Still open (tracked, not fixed here): `?token=` query-string acceptance · login
 | 2 Foundation & Decisions ✅ | ADRs 009–013, Java 21, Flyway + V7, RBAC, envelope, BCrypt, tests |
 | 3 Identity & Tenant Core ✅ | JDBC identity (orgs/users/memberships/refresh tokens), refresh rotation, logout, switch-tenant, registration → approval, user admin, V8, ADR-014 |
 | 4 Scope & Structure ✅ | JDBC scope domain (legal entities, facilities, departments, reporting periods, boundaries + membership), `ScopeService` tenant choke point, ADR-015 |
-| 5 Governance & Audit / 6 Reporting / 7 Platform Admin | Module-by-module contract convergence |
+| 5 Governance & Audit ✅ | JDBC audit lifecycle (10-state machine, checklist, findings/comments/corrections/approvals, evidence vault + versions/links, governed lock), `AuditStateMachine`, ADR-016 |
+| 6 Reporting / 7 Platform Admin | Module-by-module contract convergence |
 | 8 Frontend Integration · 9 Hardening & QA · 10 Cutover | Rewire React, test parity, retire `server/` |
 
-Decisions and rationale: `docs/DECISIONS.md` (ADR-001–015). API contract: `docs/API.md` + the Node implementation in `server/`.
+Decisions and rationale: `docs/DECISIONS.md` (ADR-001–016). API contract: `docs/API.md` + the Node implementation in `server/`.

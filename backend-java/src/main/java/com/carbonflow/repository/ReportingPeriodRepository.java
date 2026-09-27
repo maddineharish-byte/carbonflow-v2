@@ -70,6 +70,19 @@ public class ReportingPeriodRepository {
                 MAPPER, organizationId, name, startDate, endDate, status);
     }
 
+    /**
+     * Status-only update — the governed audit lock freezes its reporting
+     * period (Node parity: {@code period.status = 'LOCKED'} on
+     * AUDIT_READY → LOCKED).
+     */
+    public int updateStatus(String organizationId, String periodId, String status) {
+        return jdbc.update(
+                "UPDATE reporting_periods SET status = ?, "
+                        + "updated_at = CURRENT_TIMESTAMP "
+                        + "WHERE organization_id = ? AND id = ?",
+                status, organizationId, periodId);
+    }
+
     public int update(String organizationId, String periodId, String name,
                       java.time.LocalDate startDate, java.time.LocalDate endDate, String status) {
         return jdbc.update(

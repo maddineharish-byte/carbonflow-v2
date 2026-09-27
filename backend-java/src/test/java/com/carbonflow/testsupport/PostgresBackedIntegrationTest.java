@@ -118,6 +118,39 @@ public abstract class PostgresBackedIntegrationTest {
                 objectMapper.readTree(result.getResponse().getContentAsString()));
     }
 
+    /** Multipart POST (Phase 5 evidence vault): optional form fields + one file part. */
+    protected Api postMultipart(String uri, String bearerToken,
+                                java.util.Map<String, String> params,
+                                String fileName, String contentType, byte[] content)
+            throws Exception {
+        var builder = org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart(uri);
+        if (params != null) {
+            params.forEach(builder::param);
+        }
+        if (fileName != null) {
+            builder.file(new org.springframework.mock.web.MockMultipartFile(
+                    "file", fileName, contentType, content == null ? new byte[0] : content));
+        }
+        if (bearerToken != null) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        }
+        MvcResult result = mockMvc.perform(builder).andReturn();
+        String body = result.getResponse().getContentAsString();
+        return new Api(result.getResponse().getStatus(),
+                body == null || body.isBlank() ? objectMapper.createObjectNode()
+                        : objectMapper.readTree(body));
+    }
+
+    /** Raw GET for byte-stream responses (evidence download). */
+    protected MvcResult rawGet(String uri, String bearerToken) throws Exception {
+        var request = get(uri);
+        if (bearerToken != null) {
+            request = request.header("Authorization", "Bearer " + bearerToken);
+        }
+        return mockMvc.perform(request).andReturn();
+    }
+
     /** Performs a login and returns the parsed success envelope (asserts 200). */
     protected JsonNode login(String email, String password) throws Exception {
         Api api = postJson("/api/v1/auth/login", null,

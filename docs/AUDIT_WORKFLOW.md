@@ -42,7 +42,7 @@ The carbon audit workflow governs the progression of activity data, emission cal
  │             │ (formal freeze & hash)
  │             ▼
  │     ┌────────────────┐
- │     │     LOCKED     │ (Immutable state)
+ │     │     LOCKED     │ (Governed freeze — terminal state)
  └─────┴────────────────┘
 ```
 
@@ -60,7 +60,9 @@ The carbon audit workflow governs the progression of activity data, emission cal
 | `REVIEW` | `REJECTED` | `REVIEWER` | Reason logged; reverts audit to `DATA_COLLECTION`. |
 | `REVIEW` | `APPROVED` | `REVIEWER`, `SUSTAINABILITY_MANAGER` | Zero unresolved high-severity findings; all mandatory checklist items satisfied. |
 | `APPROVED` | `AUDIT_READY` | `SUSTAINABILITY_MANAGER`, `COMPANY_ADMIN` | Final inventory snapshot generated and verified against ledger. |
-| `AUDIT_READY` | `LOCKED` | `COMPANY_ADMIN` | Final sign-off logged; generates cryptographic SHA-256 inventory state hash. |
+| `AUDIT_READY` | `LOCKED` | `COMPANY_ADMIN` | Final sign-off logged; records a SHA-256 governance state hash over the frozen audit — an integrity checksum, not cryptographic immutability. |
+
+> **Enforcement note (Phase 5, ADR-016).** The Java backend authorizes each edge by its **frozen permission** (`docs/RBAC.md`), not by role name: `DRAFT→SUBMITTED`, `SUBMITTED→DATA_COLLECTION`, `DATA_COLLECTION→VALIDATION`, `VALIDATION→REVIEW` and the correction/rejection resume edges require `audits.submit` (CA, SM); `REVIEW→CORRECTION_REQUESTED`, `REVIEW→REJECTED` and all review-desk writes require `audits.review` (Rev, AP); `REVIEW→APPROVED` requires `audits.approve` (CA, SM, Rev); `APPROVED→AUDIT_READY` and `AUDIT_READY→LOCKED` require `audits.lock` (CA, SM). Where the role column above is narrower than the matrix (CAcc is listed for the data/validation edges but holds no `audits.submit`; AP may also reject; CA may also approve; SM may also lock), **the permission is authoritative** — a role without the code is refused with 403 `FORBIDDEN` ("Your role cannot perform the 'X -> Y' transition."). Server-enforced prerequisites are exactly: the mandatory-checklist gate and zero unresolved `HIGH`/`CRITICAL` findings before `APPROVED`/`AUDIT_READY`/`LOCKED`, at least one logged finding before `CORRECTION_REQUESTED`, a reason before `REJECTED`, the correction window (`REVIEW`/`CORRECTION_REQUESTED`) for correction requests, and 409 `AUDIT_LOCKED` for every governed write once frozen. Table prerequisites not yet machine-checkable (boundary/date setup, activity-data completeness, inventory snapshot) remain documented intent — the activity and inventory domains are later phases.
 
 ---
 

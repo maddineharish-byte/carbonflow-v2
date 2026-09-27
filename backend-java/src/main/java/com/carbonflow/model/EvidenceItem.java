@@ -9,7 +9,7 @@ public class EvidenceItem {
     private String fileName;
     private String fileType;
     private Long fileSizeBytes;
-    private String sha256Checksum; // Immutable cryptographic proof
+    private String sha256Checksum; // SHA-256 integrity digest (not an immutability proof)
     private String storageUri;
     private String uploadedBy;
     private String verificationStatus; // PENDING_VERIFICATION, VERIFIED, REJECTED

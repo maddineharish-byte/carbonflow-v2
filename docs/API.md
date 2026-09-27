@@ -99,19 +99,46 @@ Organizational boundaries (`reporting_periods.read` for reads, `reporting_period
 - `GET  /api/v1/emissions` — List active emission records with Scope 1 / Scope 2 Dual Reporting breakdown.
 
 ### 2.6 Audit Workflow & Review Desk
-- `GET  /api/v1/audits` — List audits for reporting periods (`audits.read`).
-- `POST /api/v1/audits` — Initiate audit (`audits.create`).
-- `GET  /api/v1/audits/:id` — Audit detail including checklist status and review history.
-- `POST /api/v1/audits/:id/transition` — Transition audit state (`audits.submit`, `audits.review`, `audits.approve`, `audits.lock`).
-- `POST /api/v1/audits/:id/findings` — Log review finding (`audits.review`).
-- `POST /api/v1/audits/:id/comments` — Add audit comment (`audits.review`).
-- `POST /api/v1/audits/:id/checklist/:itemId/verify` — Verify checklist requirement.
+
+Java (Phase 5, ADR-016) serves the canonical 10-state machine (`docs/AUDIT_WORKFLOW.md`) over the V1/V7 governance tables; the Node backend's legacy 6-state `/audit-rooms` model has no Java counterpart. Every transition is validated server-side (state ∩ permission ∩ gates) — never in the frontend.
+
+Audits — `audits.read` for reads, `audits.create` for lifecycle writes:
+- `GET  /api/v1/audits` — List the tenant's audits, each with `checklistSummary` and `openFindingsCount`.
+- `POST /api/v1/audits` — Initiate an audit for a reporting period (201); seeds the 8 canonical checklist items. 409 `AUDIT_ALREADY_EXISTS` for a duplicate period; 404 `REPORTING_PERIOD_NOT_FOUND` for a foreign/unknown period.
+- `GET  /api/v1/audits/:id` — Detail: `period`, `checklist`, `findings`, `comments`, `corrections`, `approvals`, `lockEvent`, `checklistSummary`, `openFindingsCount`. Unknown and cross-tenant ids are indistinguishable (404 `AUDIT_NOT_FOUND`).
+- `PUT  /api/v1/audits/:id` — Update draft `notes` only; 409 `AUDIT_NOT_DRAFT` otherwise. Status is never client-settable.
+
+Transition — edge permission from the frozen matrix (`docs/RBAC.md`):
+- `POST /api/v1/audits/:id/transition` — `{ "targetState": "...", "reason": "..." }` (`audits.submit`, `audits.review`, `audits.approve` or `audits.lock` depending on the edge). 400 `INVALID_TRANSITION` with Node's exact message and valid-target list, 400 `CHECKLIST_INCOMPLETE` / unresolved-HIGH-finding gates before `APPROVED`/`AUDIT_READY`/`LOCKED`, 400 `NO_REVIEW_FINDING` for a correction without a logged finding, 400 `VALIDATION_ERROR` for a missing reject reason, 403 `FORBIDDEN` for a role without the edge's permission, 409 `AUDIT_LOCKED` once frozen. Success: "Audit successfully transitioned to X."
+
+Checklist — `audits.review`:
+- `POST /api/v1/audits/:id/checklist` — Add an item (201; `title` required, `code` ≤ 50); 409 `DUPLICATE_CHECKLIST_ITEM`.
+- `PUT  /api/v1/audits/:id/checklist/:itemId` — Partial update of `title`/`isMandatory`/`notes` (absent = unchanged); 400 `VALIDATION_ERROR` when no field is supplied.
+- `POST /api/v1/audits/:id/checklist/:itemId/verify` — `{ "isSatisfied": true, "notes": "..." }`; the flag is required (400 `VALIDATION_ERROR` — Node coerced an absent value to `false`; Java rejects the ambiguity) and stamps verifier + timestamp. 404 `CHECKLIST_ITEM_NOT_FOUND`.
+
+Review desk:
+- `GET  /api/v1/audits/:id/findings` (`audits.read`) / `POST` (201, `audits.review`) — `title` + `description` required (Node's "Title and description required."); `severity`/`status` are checked against the V1 CHECK constraint (400 `VALIDATION_ERROR`, never a 503).
+- `PUT  /api/v1/audits/:id/findings/:findingId` — Partial update; `status: RESOLVED` stamps `resolvedBy`. 404 `FINDING_NOT_FOUND` (Node parity); unknown and cross-tenant ids are indistinguishable.
+- `POST /api/v1/audits/:id/findings/:findingId/resolve` — "Finding marked as resolved."
+- `GET  /api/v1/audits/:id/comments` (`audits.read`) / `POST` (201, `audits.review`) — blank text → 400 `EMPTY_COMMENT` ("Comment text cannot be blank."). Node left comment creation ungated; Java enforces the documented permission (deviation, ADR-016).
+- `PUT  /api/v1/audits/:id/comments/:commentId` / `DELETE ...` — Author-only edit/removal (`audits.review`); anyone else → 403 `NOT_COMMENT_AUTHOR`. 404 `COMMENT_NOT_FOUND`.
+- `GET  /api/v1/audits/:id/corrections` (`audits.read`) / `POST` (201, `audits.review`) — only while the audit is in `REVIEW` or `CORRECTION_REQUESTED`, else 409 `AUDIT_NOT_IN_CORRECTION_WINDOW`; `activityDataId` must be tenant-owned (404 `ACTIVITY_DATA_NOT_FOUND`).
+- `PUT  /api/v1/audits/:id/corrections/:correctionId` — `{ "isResolved": true }` required (400 `VALIDATION_ERROR`).
+- `GET  /api/v1/audits/:id/approvals` — Approval history with approver, role and SHA-256 signature hash (`audits.read`); `POST`/`PUT` on this path → 405 (approvals are written only by the `REVIEW → APPROVED` transition).
+
+Governed lock: every governed write on a `LOCKED` audit answers 409 `AUDIT_LOCKED` (reads stay open). The lock persists an `audit_lock_events` row with a SHA-256 `governanceStateHash` over the frozen audit state and freezes the reporting period — a **governed audit lock (integrity checksum), not cryptographic immutability** (ADR-016).
 
 ### 2.7 Evidence Vault
-- `GET  /api/v1/evidence` — List uploaded evidence documents (`evidence.read`).
-- `POST /api/v1/evidence/upload` — Upload file (multipart/form-data, ≤ 25MB) with SHA-256 generation (`evidence.upload`).
-- `GET  /api/v1/evidence/:id/download` — Download private evidence file.
-- `POST /api/v1/evidence/:id/link` — Link evidence to activity data or audit.
+
+Java (Phase 5, ADR-016) matches the Node upload chain in order — `FILE_MISSING` → entity relationship → 25 MB → MIME allow-list → magic bytes → SHA-256 — and cleans up the stored file if any step fails. `storagePath` is never serialized; bytes leave only through download after `evidence.read`.
+
+- `GET  /api/v1/evidence` — List the tenant's evidence records (`evidence.read`).
+- `GET  /api/v1/evidence/:id` — Record metadata (`evidence.read`); the storage path is excluded by construction. Malformed, unknown and cross-tenant ids are indistinguishable: 404 `EVIDENCE_NOT_FOUND` with Node's exact message.
+- `POST /api/v1/evidence/upload` — multipart `file` plus optional `entityType`/`entityId` pre-validation (201, `evidence.upload`). ≤ 25 MB (over-limit file → 400 "File size N exceeds 25 MB limit.", multipart above the 28 MB limit → 400 `UPLOAD_FAILED`), MIME allow-list (`application/pdf`, `text/csv`, XLSX/XLS/DOCX, PNG, JPEG/JPG, `text/plain`) with matching magic bytes, SHA-256 over the exact stored bytes. 400 `FILE_MISSING` for an absent/empty part; 400 `INVALID_EVIDENCE_RELATIONSHIP` for an unknown/foreign target (`ACTIVITY_DATA|AUDIT|FACILITY`).
+- `GET  /api/v1/evidence/:id/download` — Stream the current bytes (`evidence.read`); missing file → 404 `EVIDENCE_FILE_NOT_FOUND` ("The evidence file is unavailable."); file names are CR/LF/quote-sanitized in `Content-Disposition`.
+- `POST /api/v1/evidence/:id/link` — `{ "entityType": "ACTIVITY_DATA|AUDIT|FACILITY", "entityId": "..." }` (201, `evidence.upload`), tenant-validated on both sides; duplicate → 409 `DUPLICATE_EVIDENCE_LINK`.
+- `POST /api/v1/evidence/:id/versions` — Append a version (201, `evidence.version`); the record is repointed to the head and download always serves the head.
+- `DELETE /api/v1/evidence/:id` — Governed delete (`evidence.delete`): the row and its versions/links cascade and stored files are removed best-effort; while the evidence is linked to an audit → 409 `EVIDENCE_IN_USE`.
 
 ### 2.8 Inventory Snapshots, Targets & Reduction Projects
 - `GET  /api/v1/inventory` — List inventory snapshots (`inventory.read`).

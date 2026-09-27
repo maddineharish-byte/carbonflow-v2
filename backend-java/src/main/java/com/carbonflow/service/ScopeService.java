@@ -1,12 +1,18 @@
 package com.carbonflow.service;
 
+import com.carbonflow.model.AuditLockEvent;
+import com.carbonflow.model.CarbonAudit;
 import com.carbonflow.model.Department;
+import com.carbonflow.model.EvidenceRecord;
 import com.carbonflow.model.Facility;
 import com.carbonflow.model.LegalEntity;
 import com.carbonflow.model.OrganizationalBoundary;
 import com.carbonflow.model.ReportingPeriod;
+import com.carbonflow.repository.ActivityDataRepository;
+import com.carbonflow.repository.AuditRepository;
 import com.carbonflow.repository.BoundaryRepository;
 import com.carbonflow.repository.DepartmentRepository;
+import com.carbonflow.repository.EvidenceRepository;
 import com.carbonflow.repository.FacilityRepository;
 import com.carbonflow.repository.LegalEntityRepository;
 import com.carbonflow.repository.ReportingPeriodRepository;
@@ -51,17 +57,26 @@ public class ScopeService {
     private final DepartmentRepository departments;
     private final ReportingPeriodRepository reportingPeriods;
     private final BoundaryRepository boundaries;
+    private final AuditRepository audits;
+    private final ActivityDataRepository activityData;
+    private final EvidenceRepository evidence;
 
     public ScopeService(LegalEntityRepository legalEntities,
                         FacilityRepository facilities,
                         DepartmentRepository departments,
                         ReportingPeriodRepository reportingPeriods,
-                        BoundaryRepository boundaries) {
+                        BoundaryRepository boundaries,
+                        AuditRepository audits,
+                        ActivityDataRepository activityData,
+                        EvidenceRepository evidence) {
         this.legalEntities = legalEntities;
         this.facilities = facilities;
         this.departments = departments;
         this.reportingPeriods = reportingPeriods;
         this.boundaries = boundaries;
+        this.audits = audits;
+        this.activityData = activityData;
+        this.evidence = evidence;
     }
 
     public LegalEntity requireLegalEntity(String organizationId, String legalEntityId) {
@@ -90,10 +105,61 @@ public class ScopeService {
     }
 
     /**
+     * Phase 5: every audit, correction target and evidence-link endpoint
+     * resolves its audit through this choke point — a foreign or unknown
+     * audit id is indistinguishable (404 {@code AUDIT_NOT_FOUND}).
+     */
+    public CarbonAudit requireAudit(String organizationId, String auditId) {
+        return audits.findById(organizationId, requireUuid(auditId, "Audit"))
+                .orElseThrow(() -> notFound("Audit"));
+    }
+
+    /** Phase 5: activity-data ids (correction requests, evidence links). */
+    public String requireActivityData(String organizationId, String activityDataId) {
+        String id = requireUuid(activityDataId, "Activity data");
+        if (!activityData.exists(organizationId, id)) {
+            throw notFound("Activity data");
+        }
+        return id;
+    }
+
+    /**
+     * Phase 5: evidence ids (versions, links, download, delete).
+     *
+     * <p>Malformed, unknown and cross-tenant ids all collapse into the Node
+     * reference's exact response ({@code routes.ts} line 1077): code
+     * {@code EVIDENCE_NOT_FOUND}, message “Evidence document not found or
+     * cross-tenant access prohibited.” — deliberately <i>not</i> routed
+     * through {@link #notFound(String)}, whose label-derived code would leak
+     * the malformed-vs-missing distinction.
+     */
+    public EvidenceRecord requireEvidence(String organizationId, String evidenceId) {
+        String id = null;
+        if (evidenceId != null && !evidenceId.isBlank()) {
+            try {
+                id = UUID.fromString(evidenceId.trim()).toString();
+            } catch (IllegalArgumentException e) {
+                id = null;
+            }
+        }
+        if (id == null) {
+            throw evidenceNotFound();
+        }
+        return evidence.findById(organizationId, id)
+                .orElseThrow(ScopeService::evidenceNotFound);
+    }
+
+    private static AuthException evidenceNotFound() {
+        return new AuthException("EVIDENCE_NOT_FOUND",
+                "Evidence document not found or cross-tenant access prohibited.",
+                HttpStatus.NOT_FOUND);
+    }
+
+    /**
      * Malformed ids are treated exactly like missing ones (never passed to
      * SQL, where a non-UUID string would raise a cast error).
      */
-    private String requireUuid(String id, String label) {
+    static String requireUuid(String id, String label) {
         if (id == null || id.isBlank()) {
             throw notFound(label);
         }
@@ -105,7 +171,7 @@ public class ScopeService {
         return id.trim();
     }
 
-    private AuthException notFound(String label) {
+    static AuthException notFound(String label) {
         String code = label.toUpperCase().replace(' ', '_') + "_NOT_FOUND";
         return new AuthException(code,
                 label + " does not exist or access denied.", HttpStatus.NOT_FOUND);
