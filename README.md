@@ -8,7 +8,7 @@ CarbonFlow is a multi-tenant greenhouse-gas accounting and audit application wit
 - Evidence file bytes use the private local storage adapter; PostgreSQL stores metadata and tenant-owned associations, not file content.
 - Audits, inventory, targets, projects, and organization settings remain in their existing process-local paths pending later tasks.
 - The frontend is a single authenticated application shell with state-based view navigation.
-- The target backend (`backend-java/`, Java 21 + Spring Boot) is under construction at Phase 5 (governance & audit complete: ADRs through 016, 176 tests). It does not serve the frontend yet. See `backend-java/README.md` and `docs/DECISIONS.md`.
+- The target backend (`backend-java/`, Java 21 + Spring Boot) is under construction at Phase 6 (carbon accounting core complete: ADRs through 017, 210 tests). It does not serve the frontend yet. See `backend-java/README.md` and `docs/DECISIONS.md`.
 
 ## Prerequisites
 

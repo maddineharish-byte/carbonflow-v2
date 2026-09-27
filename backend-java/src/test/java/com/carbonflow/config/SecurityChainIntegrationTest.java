@@ -132,7 +132,13 @@ class SecurityChainIntegrationTest extends PostgresBackedIntegrationTest {
         mockMvc.perform(get("/api/v1/test-suite/run")
                         .header("Authorization", "Bearer " + platformToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                // Phase 6: the self-test suite must actually PASS against the
+                // live database — every re-pointed check (tenant isolation,
+                // decimal arithmetic, unit normalization, Scope 2 segregation,
+                // audit guard, evidence seal) reports green.
+                .andExpect(jsonPath("$.data.total").value(7))
+                .andExpect(jsonPath("$.data.failed").value(0));
     }
 
     @Test

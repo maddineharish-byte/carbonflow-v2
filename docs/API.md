@@ -80,23 +80,30 @@ Organizational boundaries (`reporting_periods.read` for reads, `reporting_period
 **Scope rules (Phase 4):** every endpoint derives its organization exclusively from the authenticated tenant context — client-supplied organization ids are never accepted. Missing, malformed and cross-tenant ids are indistinguishable: all answer **404 `*_NOT_FOUND`** with "*… does not exist or access denied.*" so identifiers cannot be enumerated across tenants.
 
 ### 2.3 Activity Data & Data Requests
-- `GET  /api/v1/activity-data` — Query activity data with period & facility filters (`activity_data.read`).
-- `POST /api/v1/activity-data` — Create activity data record (`activity_data.create`).
-- `PUT  /api/v1/activity-data/:id` — Update activity data (`activity_data.update`).
-- `POST /api/v1/activity-data/:id/submit` — Submit activity data for review (`activity_data.submit`).
-- `GET  /api/v1/data-requests` — List data collection requests.
-- `POST /api/v1/data-requests` — Create data request assignment.
+
+Java (Phase 6, ADR-017) owns this surface against PostgreSQL. The organization always comes from the authenticated tenant context (ADR-010/ADR-015) — a client-supplied organization id is never read — and a missing body behaves exactly like Node's `req.body || {}` (same contract error, never a generic INVALID_JSON). By-id routes collapse malformed, unknown and cross-tenant ids into one answer — 404 `ACTIVITY_NOT_FOUND`, "Activity data not found." — so an attacker cannot enumerate ids.
+
+- `GET  /api/v1/activity-data` (`activity_data.read`) — the tenant's activities, each row enriched with its latest calculation. Filters: `periodId`, `facilityId` (an empty string means "no filter", exactly Node's truthiness check) and `scope` ∈ `SCOPE_1|SCOPE_2|SCOPE_3`. A malformed uuid or an unknown/empty scope answers 400 `VALIDATION_ERROR` with Node's production message "Activity persistence is temporarily unavailable."; a persistence failure answers 503 `ACTIVITY_PERSISTENCE_UNAVAILABLE` with the same text (distinct code).
+- `POST /api/v1/activity-data` (`activity_data.create`) — 201 "Activity data registered."; the stored status is `SUBMITTED`. `status`, when present, must be the literal `SUBMITTED`. An invalid payload answers 400 `VALIDATION_ERROR` ("Activity data is invalid."); a facility or reporting period outside the tenant answers 400 `INVALID_ACTIVITY_RELATIONSHIP` ("Facility and reporting period must belong to the authenticated organization."); an audit-frozen period answers 409 `AUDIT_LOCKED`; persistence failure → 503 `ACTIVITY_PERSISTENCE_UNAVAILABLE`.
+- `PUT  /api/v1/activity-data/:id` (`activity_data.update`) — greenfield (Node has no update route). Partial update: absent fields stay unchanged, explicit `null` clears the nullable text fields. Tenant anchors (`facilityId`, `periodId`) are immutable — a persisted calculation copied them at execution time; `status` may only be set to `DRAFT|SUBMITTED|VALIDATED` (engine-owned `CALCULATED|LOCKED` → 400 `VALIDATION_ERROR`). Same 404/409/503 matrix as create.
+- `POST /api/v1/activity-data/:id/submit` (`activity_data.submit`) — greenfield. Moves the record to `SUBMITTED` (idempotent) and stamps the submitter; same error matrix.
+- `GET  /api/v1/data-requests` / `POST /api/v1/data-requests` — API contract only; the Java backend does not implement data requests (documented gap, ADR-017).
 
 ### 2.4 Reference Data (Factors & GWP)
-- `GET  /api/v1/reference/gwp-sets` — List supported GWP sets (AR4, AR5, AR6).
-- `GET  /api/v1/reference/emission-factors` — List versioned emission factors.
-- `POST /api/v1/reference/emission-factors` — Add or version an emission factor (`emission_factors.manage`).
+
+- `GET  /api/v1/reference/gwp-sets` — the supported GWP sets (AR4, AR5, AR6) with their per-gas 100-year values. Authenticated only — no permission code, matching §1's route wiring.
+- `GET  /api/v1/reference/emission-factors` (`emission_factors.read`) — active versioned emission factors with their versions (value, unit, source, year).
+- `GET  /api/v1/reference/methodologies` (`emission_factors.read`) — greenfield: the reference calculation methodologies (`GHG_PROTOCOL_CORP`, `ISO_14064_1`). The `calculations` snapshot carries no methodology column (ADR-008 fixed that shape and no V9 exists) — this endpoint is additive reference exposure, not provenance.
+- `POST /api/v1/reference/emission-factors` — API contract only (`emission_factors.manage`); the Java backend serves reference data read-only (documented gap, ADR-017).
 
 ### 2.5 Calculations & Emission Ledger
-- `POST /api/v1/calculations/run` — Run calculation for activity data record (`calculations.create`).
-- `POST /api/v1/calculations/batch-run` — Trigger batch calculation for reporting period (`calculations.create`).
-- `GET  /api/v1/calculations/:id` — Get calculation audit snapshot with formula trace.
-- `GET  /api/v1/emissions` — List active emission records with Scope 1 / Scope 2 Dual Reporting breakdown.
+
+Java (Phase 6, ADR-017) executes the deterministic engine (`docs/CALCULATIONS.md`): BigDecimal only (precision 28, `HALF_UP`), totals accumulate unrounded products, and every calculation persists its full provenance — factor id/version/value/unit/source/year, GWP set id/name, conversion factor, original and normalized quantity — plus one SHA-256 deterministic-hash over `activityId|factorVersionId|gwpSetId|plain(normalized)|plain(tonnes)`. Scope 2 location-based and market-based are separate ledger rows: never summed, never copied. Decimal fields serialize as JSON numbers with trailing zeros stripped.
+
+- `POST /api/v1/calculations/run` (`calculations.create`) — body `{ "activityDataId": "<uuid>" }`; 200 "Calculation executed deterministically." with `{ calculation, emissionRecord }`. Errors: 400 `VALIDATION_ERROR` ("activityDataId is required." when missing/non-string/empty; "Calculation input is invalid." for a malformed uuid or body), 404 `ACTIVITY_NOT_FOUND` ("Activity data not found."), 400 `FACTOR_NOT_FOUND` ("No active emission factor found for activity."), 400 `GWP_SET_NOT_FOUND` ("The selected GWP set is unavailable."), 400 `INVALID_CALCULATION_RELATIONSHIP` ("Calculation references are invalid for this organization."), 400 `VALIDATION_ERROR` for an unsupported conversion ("Unit conversion from X to kWh is not supported."), 409 `AUDIT_LOCKED` for an audit-frozen period, 503 `CALCULATION_PERSISTENCE_UNAVAILABLE` ("Calculation persistence is temporarily unavailable.").
+- `POST /api/v1/calculations/batch-run` (`calculations.create`) — body `{ "reportingPeriodId": "<uuid>" }` (non-string → 400 "reportingPeriodId must be a string."; malformed/non-object → 400 "Batch calculation input is invalid."); 200 "Batch calculation completed for N items." (literal for 0 and 1) with `{ processed, total }`. Unprocessable activities are **skipped**, not failed: `FACTOR_NOT_FOUND`, `GWP_SET_NOT_FOUND`, unsupported unit, locked period (`AUDIT_LOCKED`). Each activity is its own transaction; a relationship or contract error aborts the batch with 400 `INVALID_CALCULATION_RELATIONSHIP` ("A calculation reference is invalid for this organization." — Node's batch wording, `routes.ts:721`) or 400 `VALIDATION_ERROR`.
+- `GET  /api/v1/calculations/:id` (`calculations.read`) — the persisted snapshot with gas-level results and formula trace; malformed, unknown and foreign ids collapse to 404 `CALCULATION_NOT_FOUND` ("Calculation does not exist or access denied.").
+- `GET  /api/v1/emissions` (`reports.read`) — active ledger rows plus `summary`: five 4-decimal `HALF_UP` totals (`scope1Tonnes`, `scope2LocationTonnes`, `scope2MarketTonnes`, `totalLocationBasedTonnes`, `totalMarketBasedTonnes`). Optional `periodId` filter (malformed → 400 `VALIDATION_ERROR`, "Emission filter is invalid."). Records without a `scope2Type` classification are excluded from Scope 2 sums; location-based and market-based totals are never added together — the summary always reports both organizational totals side by side.
 
 ### 2.6 Audit Workflow & Review Desk
 

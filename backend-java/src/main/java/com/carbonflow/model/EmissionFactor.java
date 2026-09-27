@@ -1,77 +1,55 @@
 package com.carbonflow.model;
 
-import com.carbonflow.model.enums.EmissionCategory;
 import com.carbonflow.model.enums.GHGScope;
-import com.carbonflow.model.enums.Scope2Method;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * {@code emission_factors} row plus its {@code emission_factor_versions} —
+ * the wire shape produced by Node's {@code listEmissionFactorsWithVersions}:
+ * factors ordered by {@code activity_type, fuel_or_activity}, each carrying
+ * its versions ordered by {@code version_number}.
+ *
+ * <p>Reference data is global (the V1 schema has no {@code organization_id}
+ * on either table): every tenant of the platform reads the same factor
+ * library, so no tenant predicate is possible or required here.
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class EmissionFactor {
+
     private String id;
-    private String sourceName; // e.g. "EPA eGRID 2024", "DEFRA 2024", "IPCC AR6"
-    private String region;
     private GHGScope scope;
-    private EmissionCategory category;
-    private Scope2Method scope2Type;
+    private String category;
     private String activityType;
-    private String activityUnit;
-    private BigDecimal factorValue; // kgCO2e per activity unit
-    private String gasBreakdown; // JSON string or summary e.g. "CO2: 98%, CH4: 1.5%, N2O: 0.5%"
-    private int year;
-    private String referenceUrl;
+    private String fuelOrActivity;
+    private String inputUnit;
+    private List<EmissionFactorVersion> versions = new ArrayList<>();
 
-    public EmissionFactor() {}
-
-    public EmissionFactor(String id, String sourceName, String region, GHGScope scope, EmissionCategory category,
-                          Scope2Method scope2Type, String activityType, String activityUnit,
-                          BigDecimal factorValue, String gasBreakdown, int year, String referenceUrl) {
-        this.id = id;
-        this.sourceName = sourceName;
-        this.region = region;
-        this.scope = scope;
-        this.category = category;
-        this.scope2Type = scope2Type;
-        this.activityType = activityType;
-        this.activityUnit = activityUnit;
-        this.factorValue = factorValue;
-        this.gasBreakdown = gasBreakdown;
-        this.year = year;
-        this.referenceUrl = referenceUrl;
+    public EmissionFactor() {
     }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
-    public String getSourceName() { return sourceName; }
-    public void setSourceName(String sourceName) { this.sourceName = sourceName; }
-
-    public String getRegion() { return region; }
-    public void setRegion(String region) { this.region = region; }
-
     public GHGScope getScope() { return scope; }
     public void setScope(GHGScope scope) { this.scope = scope; }
 
-    public EmissionCategory getCategory() { return category; }
-    public void setCategory(EmissionCategory category) { this.category = category; }
-
-    public Scope2Method getScope2Type() { return scope2Type; }
-    public void setScope2Type(Scope2Method scope2Type) { this.scope2Type = scope2Type; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
     public String getActivityType() { return activityType; }
     public void setActivityType(String activityType) { this.activityType = activityType; }
 
-    public String getActivityUnit() { return activityUnit; }
-    public void setActivityUnit(String activityUnit) { this.activityUnit = activityUnit; }
+    public String getFuelOrActivity() { return fuelOrActivity; }
+    public void setFuelOrActivity(String fuelOrActivity) { this.fuelOrActivity = fuelOrActivity; }
 
-    public BigDecimal getFactorValue() { return factorValue; }
-    public void setFactorValue(BigDecimal factorValue) { this.factorValue = factorValue; }
+    public String getInputUnit() { return inputUnit; }
+    public void setInputUnit(String inputUnit) { this.inputUnit = inputUnit; }
 
-    public String getGasBreakdown() { return gasBreakdown; }
-    public void setGasBreakdown(String gasBreakdown) { this.gasBreakdown = gasBreakdown; }
-
-    public int getYear() { return year; }
-    public void setYear(int year) { this.year = year; }
-
-    public String getReferenceUrl() { return referenceUrl; }
-    public void setReferenceUrl(String referenceUrl) { this.referenceUrl = referenceUrl; }
+    public List<EmissionFactorVersion> getVersions() { return versions; }
+    public void setVersions(List<EmissionFactorVersion> versions) {
+        this.versions = versions == null ? new ArrayList<>() : versions;
+    }
 }

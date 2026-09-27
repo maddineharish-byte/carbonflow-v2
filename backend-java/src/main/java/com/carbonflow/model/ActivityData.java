@@ -1,56 +1,64 @@
 package com.carbonflow.model;
 
-import com.carbonflow.model.enums.EmissionCategory;
+import com.carbonflow.dto.PlainBigDecimalSerializer;
 import com.carbonflow.model.enums.GHGScope;
-import com.carbonflow.model.enums.Scope2Method;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/**
+ * {@code activity_data} row in the exact wire shape produced by the Node
+ * reference's {@code mapActivity} ({@code server/activity-repository.ts}):
+ * DB-backed columns plus the response-only enrichment {@code facilityName},
+ * {@code evidence} and {@code calculation}.
+ *
+ * <p>{@code evidence} and {@code calculation} are annotated {@code ALWAYS}
+ * because the Node payload always carries both keys — {@code null} when the
+ * activity has no linked evidence / has never been calculated — while every
+ * other absent field is dropped ({@code NON_NULL}, matching Node's
+ * {@code undefined} properties which {@code JSON.stringify} omits).
+ *
+ * <p>Scope 2 is intentionally <em>not</em> stored on the activity: the
+ * location/market perspective is derived at calculation time from
+ * {@code category}/{@code activityType} and persisted on the emission record
+ * (see {@link EmissionRecord#getScope2Type()}).
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ActivityData {
+
     private String id;
     private String organizationId;
-    private String facilityId;
     private String reportingPeriodId;
+    private String facilityId;
+    private String departmentId;
     private GHGScope scope;
-    private EmissionCategory category;
-    private Scope2Method scope2Type;
+    private String category;
     private String activityType;
+    @JsonSerialize(using = PlainBigDecimalSerializer.class)
     private BigDecimal quantity;
     private String unit;
     private LocalDate startDate;
     private LocalDate endDate;
-    private String description;
-    private String status; // RAW, CALCULATED, AUDITED, FLAGGED
-    private String evidenceId;
-    private String calculationId;
+    private String source;
+    private String status;
+    private String notes;
+    private String submittedBy;
     private Instant createdAt;
+    private Instant updatedAt;
 
-    public ActivityData() {}
+    // Response-only enrichment (never persisted on this table).
+    private String facilityName;
 
-    public ActivityData(String id, String organizationId, String facilityId, String reportingPeriodId,
-                        GHGScope scope, EmissionCategory category, Scope2Method scope2Type,
-                        String activityType, BigDecimal quantity, String unit,
-                        LocalDate startDate, LocalDate endDate, String description,
-                        String status, String evidenceId, String calculationId, Instant createdAt) {
-        this.id = id;
-        this.organizationId = organizationId;
-        this.facilityId = facilityId;
-        this.reportingPeriodId = reportingPeriodId;
-        this.scope = scope;
-        this.category = category;
-        this.scope2Type = scope2Type;
-        this.activityType = activityType;
-        this.quantity = quantity;
-        this.unit = unit;
-        this.startDate = startDate;
-        this.endDate = endDate;
-        this.description = description;
-        this.status = status;
-        this.evidenceId = evidenceId;
-        this.calculationId = calculationId;
-        this.createdAt = createdAt;
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private ActivityEvidence evidence;
+
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private Calculation calculation;
+
+    public ActivityData() {
     }
 
     public String getId() { return id; }
@@ -59,20 +67,20 @@ public class ActivityData {
     public String getOrganizationId() { return organizationId; }
     public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
 
+    public String getReportingPeriodId() { return reportingPeriodId; }
+    public void setReportingPeriodId(String reportingPeriodId) { this.reportingPeriodId = reportingPeriodId; }
+
     public String getFacilityId() { return facilityId; }
     public void setFacilityId(String facilityId) { this.facilityId = facilityId; }
 
-    public String getReportingPeriodId() { return reportingPeriodId; }
-    public void setReportingPeriodId(String reportingPeriodId) { this.reportingPeriodId = reportingPeriodId; }
+    public String getDepartmentId() { return departmentId; }
+    public void setDepartmentId(String departmentId) { this.departmentId = departmentId; }
 
     public GHGScope getScope() { return scope; }
     public void setScope(GHGScope scope) { this.scope = scope; }
 
-    public EmissionCategory getCategory() { return category; }
-    public void setCategory(EmissionCategory category) { this.category = category; }
-
-    public Scope2Method getScope2Type() { return scope2Type; }
-    public void setScope2Type(Scope2Method scope2Type) { this.scope2Type = scope2Type; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
     public String getActivityType() { return activityType; }
     public void setActivityType(String activityType) { this.activityType = activityType; }
@@ -89,18 +97,30 @@ public class ActivityData {
     public LocalDate getEndDate() { return endDate; }
     public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    public String getEvidenceId() { return evidenceId; }
-    public void setEvidenceId(String evidenceId) { this.evidenceId = evidenceId; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 
-    public String getCalculationId() { return calculationId; }
-    public void setCalculationId(String calculationId) { this.calculationId = calculationId; }
+    public String getSubmittedBy() { return submittedBy; }
+    public void setSubmittedBy(String submittedBy) { this.submittedBy = submittedBy; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getFacilityName() { return facilityName; }
+    public void setFacilityName(String facilityName) { this.facilityName = facilityName; }
+
+    public ActivityEvidence getEvidence() { return evidence; }
+    public void setEvidence(ActivityEvidence evidence) { this.evidence = evidence; }
+
+    public Calculation getCalculation() { return calculation; }
+    public void setCalculation(Calculation calculation) { this.calculation = calculation; }
 }

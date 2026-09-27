@@ -20,3 +20,6 @@ vault_storage/
 .idea/
 *.iml
 .vscode/
+
+# Local tool state (agent skills etc.)
+.opencode/

@@ -1,58 +1,74 @@
 package com.carbonflow.controller;
 
 import com.carbonflow.config.TenantContext;
+import com.carbonflow.dto.AccountingResponses;
 import com.carbonflow.dto.ApiResponse;
+import com.carbonflow.dto.BatchCalculationRequest;
 import com.carbonflow.dto.CalculationRequest;
-import com.carbonflow.model.ActivityData;
 import com.carbonflow.model.Calculation;
-import com.carbonflow.model.EmissionFactor;
-import com.carbonflow.repository.DataStore;
-import com.carbonflow.service.GhgCalculationEngine;
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
+import com.carbonflow.service.CalculationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
+/**
+ * Calculation module (Phase 6): {@code POST /calculations/run},
+ * {@code POST /calculations/batch-run} (Node production contract) and the
+ * greenfield {@code GET /calculations/:id} audit snapshot (API.md §2.5).
+ *
+ * <p>{@code GET /factors} from the prototype era is retired — factor reads
+ * live behind {@code GET /reference/emission-factors} like the reference
+ * backend (ADR-017).
+ *
+ * <p>Bodies are {@code required = false} so a missing payload reaches the
+ * service's contract validation ({@code activityDataId is required.}) exactly
+ * like {@code req.body || {}} in Node.
+ */
 @RestController
 @RequestMapping("/api/v1")
 public class CalculationController {
 
-    private final DataStore dataStore;
-    private final GhgCalculationEngine calculationEngine;
+    private final CalculationService calculations;
 
-    public CalculationController(DataStore dataStore, GhgCalculationEngine calculationEngine) {
-        this.dataStore = dataStore;
-        this.calculationEngine = calculationEngine;
-    }
-
-    @GetMapping("/factors")
-    @PreAuthorize("hasAuthority('PERMISSION_emission_factors.read')")
-    public ResponseEntity<ApiResponse<List<EmissionFactor>>> getEmissionFactors() {
-        return ResponseEntity.ok(ApiResponse.ok(List.copyOf(dataStore.emissionFactors.values())));
+    public CalculationController(CalculationService calculations) {
+        this.calculations = calculations;
     }
 
     @PostMapping("/calculations/run")
     @PreAuthorize("hasAuthority('PERMISSION_calculations.create')")
-    public ResponseEntity<ApiResponse<Calculation>> runCalculation(@Valid @RequestBody CalculationRequest req) {
-        TenantContext ctx = TenantContext.get();
+    public ResponseEntity<ApiResponse<AccountingResponses.CalculationRunResult>> run(
+            @RequestBody(required = false) CalculationRequest request) {
+        AccountingResponses.CalculationRunResult result =
+                calculations.run(org(), userId(), request);
+        return ResponseEntity.ok(ApiResponse.ok(result, "Calculation executed deterministically."));
+    }
 
-        ActivityData act = dataStore.activityData.get(req.getActivityDataId());
-        if (act == null || !act.getOrganizationId().equals(ctx.getOrganizationId())) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.fail("NOT_FOUND", "Activity data record not found for tenant."));
-        }
+    @PostMapping("/calculations/batch-run")
+    @PreAuthorize("hasAuthority('PERMISSION_calculations.create')")
+    public ResponseEntity<ApiResponse<AccountingResponses.BatchCalculationResult>> batchRun(
+            @RequestBody(required = false) BatchCalculationRequest request) {
+        AccountingResponses.BatchCalculationResult result =
+                calculations.batchRun(org(), userId(), request);
+        return ResponseEntity.ok(ApiResponse.ok(result,
+                "Batch calculation completed for " + result.processed + " items."));
+    }
 
-        EmissionFactor factor = dataStore.emissionFactors.get(req.getEmissionFactorId());
-        if (factor == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.fail("NOT_FOUND", "Emission factor not found."));
-        }
+    @GetMapping("/calculations/{calculationId}")
+    @PreAuthorize("hasAuthority('PERMISSION_calculations.read')")
+    public ResponseEntity<ApiResponse<Calculation>> get(@PathVariable String calculationId) {
+        return ResponseEntity.ok(ApiResponse.ok(calculations.getCalculation(org(), calculationId)));
+    }
 
-        Calculation calc = calculationEngine.executeCalculation(act, factor, ctx.getUserId());
-        return ResponseEntity.ok(ApiResponse.ok(calc, "GHG calculation executed with deterministic SHA-256 seal."));
+    private static String org() {
+        return TenantContext.get().getOrganizationId();
+    }
+
+    private static String userId() {
+        return TenantContext.get().getUserId();
     }
 }

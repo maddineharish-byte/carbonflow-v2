@@ -5,10 +5,11 @@
 Carbon accounting requires deterministic arithmetic identical to financial ledgers. Standard IEEE-754 floating-point operations (`0.1 + 0.2 = 0.30000000000000004`) lead to cumulative discrepancies that fail external audit verification.
 
 ### Precision Standards
-- **Implementation**: Java `BigDecimal` / TypeScript `Decimal.js`.
-- **Internal Computation Scale**: 8 decimal places.
+- **Implementation**: Java `BigDecimal` (production) / TypeScript `Decimal.js` (frozen Node reference).
+- **Phase 6 note**: the Spring Boot backend's `GhgCalculationEngine` is the production implementation of this specification; `server/calc.ts` remains the read-only parity oracle.
+- **Internal Computation Scale**: 28 decimal places (`MathContext`), reported snapshots at 8 decimal places for normalized quantities.
 - **Reporting Scale**: 4 decimal places for metric tonnes CO2e (`tCO2e`), 2 decimal places for kilogram CO2e (`kgCO2e`).
-- **Rounding Mode**: `ROUND_HALF_UP` (standard accounting rounding).
+- **Rounding Mode**: `HALF_UP` (standard accounting rounding); ledger totals accumulate **unrounded** products and round only at presentation.
 
 ---
 
@@ -21,13 +22,14 @@ Carbon accounting requires deterministic arithmetic identical to financial ledge
          │
          ▼
 ┌─────────────────┐
-│ Unit Validation │ Validates input unit belongs to accepted quantity domain
-│ & Normalization │ Converts input quantity to factor reference unit (e.g. Gallons -> Litres: * 3.785411784)
+│ Factor Lookup   │ Selects the active factor version for the activity type,
+│ & GWP Set       │ plus the GWP set (provenance input)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ Factor Lookup   │ Selects active factor version effective for the activity date & geography
+│ Unit Validation │ Validates the input unit and converts the quantity to
+│ & Normalization │ the factor's reference unit (e.g. Gallons -> Litres: * 3.785411784)
 └────────┬────────┘
          │
          ▼
@@ -48,12 +50,15 @@ Carbon accounting requires deterministic arithmetic identical to financial ledge
          │
          ▼
 ┌─────────────────┐
-│ Snapshot Freeze │ Creates immutable CalculationSnapshot with full lineage & SHA-256 trace
+│ Gas-Level Rows  │ One calculation_gas_result per gas (CO2, CH4, N2O) and
+│ & Emission      │ the ACTIVE ledger row (prior active record superseded);
+│ Record          │ Scope 2 rows carry their location/market classification
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ Emission Record │ Inserts ACTIVE record into emission ledger
+│ Snapshot Freeze │ Immutable calculation snapshot (full lineage) + SHA-256
+│                 │ deterministic hash — integrity checksum, not a seal
 └─────────────────┘
 ```
 
@@ -66,11 +71,16 @@ All conversions utilize explicit, deterministic conversion ratios:
 | Source Unit | Target Unit | Multiplier / Formula | Domain |
 | :--- | :--- | :--- | :--- |
 | `MWh` | `kWh` | `1,000` | Energy |
+| `kWh` | `MWh` | `0.001` | Energy |
 | `Therms` | `kWh` | `29.3001` | Energy |
 | `Gallons (US)` | `Litres` | `3.785411784` | Volume |
+| `Litres` | `Gallons (US)` | `1 / 3.785411784` | Volume |
 | `m3 (Natural Gas)` | `kWh` | `10.55` | Energy |
 | `KG` | `Metric Tonnes` | `0.001` | Mass |
 | `Metric Tonnes` | `KG` | `1,000` | Mass |
+| any unit | same unit | `1` (identity) | any |
+
+An unsupported pair is a hard error — `400 VALIDATION_ERROR`, `Unit conversion from X to Y is not supported.` — the engine never silently multiplies by 1 across *different* units. Unit matching is case-insensitive with common aliases (`GAL`/`GALLON`, `L`/`LITRE`, `T`/`KILOGRAMS`, …).
 
 ---
 
@@ -101,19 +111,6 @@ Under GHG Protocol Scope 2 Guidance, organizations operating in markets with con
 
 ---
 
-## 6. Persistence & Snapshot Boundary (TASK 2.5)
-
-Production calculation execution remains owned by `server/calc.ts`; persistence is owned by `server/calculation-repository.ts`.
-
-- `/calculations/run` and `/calculations/batch-run` resolve active factor versions and GWP values from PostgreSQL reference tables.
-- The repository transactionally writes `calculations`, `calculation_gas_results`, `emission_records`, prior active-record supersession, and the activity `CALCULATED` status.
-- The persisted calculation snapshot includes original/normalized quantity and units, conversion factor, factor ID/version/value/unit/source/year, GWP set/name, gas results, hash, and timestamp.
-- A later active emission-factor version cannot change a historical calculation because the snapshot fields and `factor_version_id` are immutable.
-- Scope 2 location-based and market-based records remain separate rows; no market-based value is copied from location-based results, and no location+market sum is used.
-- Calculation methodology fields are not part of the established engine model and were not invented.
-
----
-
 ## 5. Reference GWP Sets (100-Year Time Horizon)
 
 | Gas | Chemical Formula | IPCC AR4 (2007) | IPCC AR5 (2013) | IPCC AR6 (2021) |
@@ -124,3 +121,17 @@ Production calculation execution remains owned by `server/calc.ts`; persistence 
 | Hydrofluorocarbon-134a | $\text{HFC-134a}$ | 1,430 | 1,300 | 1,530 |
 | Hydrofluorocarbon-32 | $\text{HFC-32}$ | 675 | 677 | 771 |
 | Sulfur Hexafluoride | $\text{SF}_6$ | 22,800 | 23,500 | 25,200 |
+
+---
+
+## 6. Engine Execution & Persistence (Phase 6, ADR-017)
+
+Production calculation for the Java API is owned by the Spring Boot backend — `CalculationService` (contract & batch orchestration), `GhgCalculationEngine` (pure deterministic arithmetic) and `CalculationPersistence` (the single transactional writer). Node's `server/calc.ts` / `server/calculation-repository.ts` remain frozen as the parity oracle.
+
+- **Run** (`POST /calculations/run`) reads the activity, its tenant anchors and the factor and GWP reference data *outside* any transaction, then persists in **one** transaction: the `calculation_gas_results` rows (engine order CO₂, CH₄, N₂O), the `calculations` snapshot, the `emission_records` row plus supersession of the activity's prior active record, and the activity's `CALCULATED` status. A duplicate deterministic hash (re-execution) rolls the whole transaction back — the ledger never holds two identical calculations.
+- **Batch** (`POST /calculations/batch-run`) runs one transaction per activity (independent, abort-on-error); activities with a missing factor, missing GWP set, unsupported unit or an audit-frozen period are reported as unprocessed (`total − processed`), never as failures.
+- **Snapshot**: original + normalized quantity and units, conversion factor, factor id/version/value/unit/source/year, GWP set id/name, gas-level results, calculation hash and timestamp — all immutable. A later active factor version therefore cannot change history: supersession of `emission_records` rows is the only ledger mutation.
+- **Deterministic hash**: `SHA-256(activityId|factorVersionId|gwpSetId|plain(normalized)|plain(tonnes))` — an **integrity checksum for engine determinism, not a cryptographic seal**.
+- **Scope 2**: location-based and market-based records remain separate rows (ADR-002); no market value is copied from location results and no location+market sum is ever used. Records without a `scope2Type` classification never enter a Scope 2 sum.
+- **Audit freeze**: a governed Phase 5 lock rejects writes with `409 AUDIT_LOCKED` (run) and skips them in batch — the audit's certified history cannot be mutated by accounting APIs.
+- **Methodology** is reference data, not provenance: `GET /reference/methodologies` exposes `calculation_methodologies` (`GHG_PROTOCOL_CORP`, `ISO_14064_1`) additively, while `calculations` keeps ADR-008's snapshot shape (no methodology column; V9 is forbidden) — no calculation claims a methodology it cannot prove.

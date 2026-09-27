@@ -8,7 +8,7 @@ Enterprise Greenhouse Gas (GHG) Accounting, Audit Preparation, Evidence Manageme
 - **Multi-Tenant Hierarchy**: Organizations, Legal Entities, Facilities, Departments, and Scope Consolidation Boundaries.
 - **Deterministic Calculation Engine**: Implements high-precision decimal math (Java `BigDecimal` equivalent) avoiding floating-point drift. Preserves immutable calculation snapshots.
 - **Scope 1 & Scope 2 Dual Reporting**: Stationary combustion, mobile fleet, process emissions, fugitive gases, and side-by-side Location-Based vs Market-Based grid accounting.
-- **8-State Governed Audit Machine**: `DRAFT` ➔ `SUBMITTED` ➔ `DATA_COLLECTION` ➔ `VALIDATION` ➔ `REVIEW` ➔ `APPROVED` ➔ `AUDIT_READY` ➔ `LOCKED`.
+- **10-State Governed Audit Machine**: `DRAFT` → `SUBMITTED` → `DATA_COLLECTION` → `VALIDATION` → `REVIEW` → `APPROVED` → `AUDIT_READY` → `LOCKED` (with `CORRECTION_REQUESTED` / `REJECTED` branches).
 - **Evidence Vault**: Secure attachment of utility bills and metering data with SHA-256 integrity verification (≤ 25MB).
 - **Inventory Snapshots & Restatements**: Frozen reporting periods with zero double-counting.
 - **Targets & Reduction Projects**: Decarbonization goals with projected vs realized carbon savings.

@@ -6,9 +6,12 @@ import com.carbonflow.dto.DashboardSummaryDto;
 import com.carbonflow.dto.TrendInsightsDto;
 import com.carbonflow.model.EmissionRecord;
 import com.carbonflow.model.Facility;
+import com.carbonflow.model.ReportingPeriod;
 import com.carbonflow.model.enums.GHGScope;
 import com.carbonflow.model.enums.Scope2Method;
-import com.carbonflow.repository.DataStore;
+import com.carbonflow.repository.EmissionRecordRepository;
+import com.carbonflow.repository.FacilityRepository;
+import com.carbonflow.repository.ReportingPeriodRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,17 +20,37 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Dashboard reads (Phase 6 swapped the prototype in-memory maps for the
+ * PostgreSQL repositories — same DTOs, same permission gates, same
+ * calculations, same trend payloads).
+ *
+ * <p>Scope 2 stays dual-reported end to end: location-based and market-based
+ * totals accumulate separately and are never summed together. Activity
+ * {@code category} is a plain text column in PostgreSQL (no enum).
+ */
 @RestController
 @RequestMapping("/api/v1/analytics")
 public class AnalyticsController {
 
-    private final DataStore dataStore;
+    private final EmissionRecordRepository emissionRecords;
+    private final FacilityRepository facilityRepository;
+    private final ReportingPeriodRepository reportingPeriodRepository;
 
-    public AnalyticsController(DataStore dataStore) {
-        this.dataStore = dataStore;
+    public AnalyticsController(EmissionRecordRepository emissionRecords,
+                               FacilityRepository facilityRepository,
+                               ReportingPeriodRepository reportingPeriodRepository) {
+        this.emissionRecords = emissionRecords;
+        this.facilityRepository = facilityRepository;
+        this.reportingPeriodRepository = reportingPeriodRepository;
     }
 
     @GetMapping("/dashboard")
@@ -36,9 +59,7 @@ public class AnalyticsController {
         TenantContext ctx = TenantContext.get();
         String orgId = ctx.getOrganizationId();
 
-        List<EmissionRecord> records = dataStore.emissionRecords.values().stream()
-                .filter(e -> e.getOrganizationId().equals(orgId) && "ACTIVE".equals(e.getStatus()))
-                .collect(Collectors.toList());
+        List<EmissionRecord> records = emissionRecords.list(orgId, null, null, "ACTIVE", null);
 
         DashboardSummaryDto.EmissionsTotals totals = new DashboardSummaryDto.EmissionsTotals();
         Map<String, BigDecimal> categoryMap = new HashMap<>();
@@ -58,7 +79,7 @@ public class AnalyticsController {
                 totals.scope3 = totals.scope3.add(tonnes);
             }
 
-            categoryMap.merge(r.getCategory().name(), tonnes, BigDecimal::add);
+            categoryMap.merge(r.getCategory(), tonnes, BigDecimal::add);
         }
 
         totals.totalLocationBased = totals.scope1.add(totals.scope2Location).add(totals.scope3);
@@ -69,18 +90,16 @@ public class AnalyticsController {
                 .collect(Collectors.toList());
 
         List<DashboardSummaryDto.FacilitySummary> facilitySummaries = new ArrayList<>();
-        List<Facility> orgFacilities = dataStore.facilities.values().stream()
-                .filter(f -> f.getOrganizationId().equals(orgId))
-                .collect(Collectors.toList());
+        List<Facility> orgFacilities = facilityRepository.list(orgId);
 
         for (Facility fac : orgFacilities) {
             BigDecimal s1 = records.stream()
-                    .filter(r -> r.getFacilityId().equals(fac.getId()) && r.getScope() == GHGScope.SCOPE_1)
+                    .filter(r -> r.getFacilityId() != null && r.getFacilityId().equals(fac.getId()) && r.getScope() == GHGScope.SCOPE_1)
                     .map(EmissionRecord::getCo2eTonnes)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal s2 = records.stream()
-                    .filter(r -> r.getFacilityId().equals(fac.getId()) && r.getScope() == GHGScope.SCOPE_2 && r.getScope2Type() == Scope2Method.LOCATION_BASED)
+                    .filter(r -> r.getFacilityId() != null && r.getFacilityId().equals(fac.getId()) && r.getScope() == GHGScope.SCOPE_2 && r.getScope2Type() == Scope2Method.LOCATION_BASED)
                     .map(EmissionRecord::getCo2eTonnes)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -95,9 +114,8 @@ public class AnalyticsController {
         dto.setAuditHealth(new DashboardSummaryDto.AuditHealthSummary());
 
         // 12 Reporting Periods Trend for Carbon Emissions
-        List<com.carbonflow.model.ReportingPeriod> periods = dataStore.reportingPeriods.values().stream()
-                .filter(p -> p.getOrganizationId().equals(orgId))
-                .sorted(Comparator.comparing(com.carbonflow.model.ReportingPeriod::getStartDate))
+        List<ReportingPeriod> periods = reportingPeriodRepository.list(orgId).stream()
+                .sorted(Comparator.comparing(ReportingPeriod::getStartDate))
                 .collect(Collectors.toList());
 
         List<DashboardSummaryDto.PeriodTrend> periodTrends = new ArrayList<>();
@@ -118,7 +136,7 @@ public class AnalyticsController {
         String[] monthNames = {"Jan 24", "Feb 24", "Mar 24", "Apr 24", "May 24", "Jun 24", "Jul 24", "Aug 24", "Sep 24", "Oct 24", "Nov 24", "Dec 24"};
 
         for (int i = 0; i < 12; i++) {
-            com.carbonflow.model.ReportingPeriod p = (i < periods.size()) ? periods.get(i) : null;
+            ReportingPeriod p = (i < periods.size()) ? periods.get(i) : null;
             String periodId = (p != null) ? p.getId() : ("period-2024-m" + String.format("%02d", i + 1));
             String periodName = (p != null) ? p.getName() : ("2024-M" + String.format("%02d", i + 1) + " (" + monthNames[i] + ")");
             String shortName = monthNames[i];
