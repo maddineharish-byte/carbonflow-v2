@@ -80,7 +80,7 @@ public abstract class PostgresBackedIntegrationTest {
         }
         MvcResult result = mockMvc.perform(request).andReturn();
         return new Api(result.getResponse().getStatus(),
-                objectMapper.readTree(result.getResponse().getContentAsString()));
+                objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8)));
     }
 
     /** GET without status expectations. */
@@ -91,7 +91,7 @@ public abstract class PostgresBackedIntegrationTest {
         }
         MvcResult result = mockMvc.perform(request).andReturn();
         return new Api(result.getResponse().getStatus(),
-                objectMapper.readTree(result.getResponse().getContentAsString()));
+                objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8)));
     }
 
     /** PUT without status expectations — for update envelopes and error cases. */
@@ -104,7 +104,7 @@ public abstract class PostgresBackedIntegrationTest {
         }
         MvcResult result = mockMvc.perform(request).andReturn();
         return new Api(result.getResponse().getStatus(),
-                objectMapper.readTree(result.getResponse().getContentAsString()));
+                objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8)));
     }
 
     /** DELETE without status expectations — for delete envelopes and 404/405 cases. */
@@ -115,7 +115,7 @@ public abstract class PostgresBackedIntegrationTest {
         }
         MvcResult result = mockMvc.perform(request).andReturn();
         return new Api(result.getResponse().getStatus(),
-                objectMapper.readTree(result.getResponse().getContentAsString()));
+                objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8)));
     }
 
     /** Multipart POST (Phase 5 evidence vault): optional form fields + one file part. */
@@ -136,7 +136,7 @@ public abstract class PostgresBackedIntegrationTest {
             builder.header("Authorization", "Bearer " + bearerToken);
         }
         MvcResult result = mockMvc.perform(builder).andReturn();
-        String body = result.getResponse().getContentAsString();
+        String body = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return new Api(result.getResponse().getStatus(),
                 body == null || body.isBlank() ? objectMapper.createObjectNode()
                         : objectMapper.readTree(body));

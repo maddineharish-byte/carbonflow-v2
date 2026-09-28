@@ -110,6 +110,30 @@ public class EmissionRecordRepository {
                 calculationId, calculationId);
     }
 
+    /**
+     * Phase 7 export (task 7.6): tenant-scoped ACTIVE ledger with the four
+     * client filters — every parameter is validated by the controller before
+     * it reaches SQL ({@code 400} for malformed UUIDs/unknown enum values, so
+     * a bad filter can never raise a cast error), and the ordering is the
+     * deterministic {@code created_at DESC, id DESC} (identical databases
+     * always produce byte-identical CSVs).
+     */
+    public List<EmissionRecord> listForExport(String organizationId, String periodId,
+                                              String facilityId, String scope,
+                                              String scope2Type) {
+        return jdbc.query(
+                "SELECT " + COLUMNS + " FROM emission_records "
+                        + "WHERE organization_id = ? AND status = 'ACTIVE' "
+                        + "AND (?::text IS NULL OR reporting_period_id = ?::uuid) "
+                        + "AND (?::text IS NULL OR facility_id = ?::uuid) "
+                        + "AND (?::text IS NULL OR scope = ?) "
+                        + "AND (?::text IS NULL OR scope2_type = ?) "
+                        + "ORDER BY created_at DESC, id DESC",
+                MAPPER,
+                organizationId, periodId, periodId, facilityId, facilityId,
+                scope, scope, scope2Type, scope2Type);
+    }
+
     public Optional<EmissionRecord> findById(String organizationId, String emissionId) {
         List<EmissionRecord> rows = jdbc.query(
                 "SELECT " + COLUMNS + " FROM emission_records "
@@ -170,6 +194,31 @@ public class EmissionRecordRepository {
                         + "FROM emission_records WHERE status = 'ACTIVE'",
                 (rs, rowNum) -> new PerspectiveTotals(
                         rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3)));
+        return totals == null
+                ? new PerspectiveTotals(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+                : totals;
+    }
+
+    /**
+     * Phase 7: tenant- and period-scoped perspective sums of the ACTIVE
+     * ledger — the read-only aggregation inventory snapshots persist (a
+     * report over already-calculated records, never a second calculation).
+     * Same dual-basis FILTER clauses as {@link #sumActivePerspectives()};
+     * always one aggregated row (COALESCE), so {@code null} stays defensive.
+     */
+    public PerspectiveTotals sumActiveForPeriod(String organizationId, String periodId) {
+        PerspectiveTotals totals = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(co2e_tonnes) FILTER (WHERE scope = 'SCOPE_1'), 0), "
+                        + "       COALESCE(SUM(co2e_tonnes) FILTER (WHERE scope = 'SCOPE_2' "
+                        + "                                    AND scope2_type = 'LOCATION_BASED'), 0), "
+                        + "       COALESCE(SUM(co2e_tonnes) FILTER (WHERE scope = 'SCOPE_2' "
+                        + "                                    AND scope2_type = 'MARKET_BASED'), 0) "
+                        + "FROM emission_records "
+                        + "WHERE status = 'ACTIVE' AND organization_id = ? "
+                        + "AND reporting_period_id = ?",
+                (rs, rowNum) -> new PerspectiveTotals(
+                        rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3)),
+                organizationId, periodId);
         return totals == null
                 ? new PerspectiveTotals(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
                 : totals;

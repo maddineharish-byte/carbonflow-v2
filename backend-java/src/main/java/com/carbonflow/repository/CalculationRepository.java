@@ -148,6 +148,15 @@ public class CalculationRepository {
         return withGasResults(rows);
     }
 
+    /** Phase 7 period summary: calculations belonging to one reporting period. */
+    public int countForPeriod(String organizationId, String periodId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM calculations "
+                        + "WHERE organization_id = ? AND reporting_period_id = ?",
+                Integer.class, organizationId, periodId);
+        return count == null ? 0 : count;
+    }
+
     /**
      * Node's {@code listLatestCalculationsByActivities}: the newest
      * calculation per activity (ordered {@code calculated_at DESC, id DESC}),

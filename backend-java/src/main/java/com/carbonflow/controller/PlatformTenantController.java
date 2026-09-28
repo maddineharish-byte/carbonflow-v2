@@ -42,6 +42,13 @@ public class PlatformTenantController {
         return ResponseEntity.ok(ApiResponse.ok(platformTenantService.list(status)));
     }
 
+    @GetMapping("/{organizationId}")
+    @PreAuthorize("hasAuthority('PERMISSION_platform.tenants.read')")
+    public ResponseEntity<ApiResponse<Organization>> get(
+            @PathVariable String organizationId) {
+        return ResponseEntity.ok(ApiResponse.ok(platformTenantService.get(organizationId)));
+    }
+
     @PostMapping("/{organizationId}/approve")
     @PreAuthorize("hasAuthority('PERMISSION_platform.tenants.manage')")
     public ResponseEntity<ApiResponse<Organization>> approve(@PathVariable String organizationId) {

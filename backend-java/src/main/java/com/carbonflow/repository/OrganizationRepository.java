@@ -23,23 +23,32 @@ public class OrganizationRepository {
             "o.id::text AS id, o.name AS name, o.tax_id AS tax_id, o.country AS country, "
                     + "o.industry AS industry, o.status AS status, o.created_at AS created_at, "
                     + "o.updated_at AS updated_at, "
+                    + "o.status_changed_at AS status_changed_at, "
+                    + "o.status_changed_by::text AS status_changed_by, "
+                    + "o.status_note AS status_note, "
                     + "COALESCE(os.consolidation_approach, 'OPERATIONAL_CONTROL') AS consolidation_approach, "
                     + "COALESCE(os.base_year, 2023) AS base_year ";
 
     static final String FROM_JOIN =
             "FROM organizations o LEFT JOIN organization_settings os ON os.organization_id = o.id ";
 
-    static final RowMapper<Organization> MAPPER = (rs, rowNum) -> new Organization(
-            rs.getString("id"),
-            rs.getString("name"),
-            rs.getString("tax_id"),
-            rs.getString("country"),
-            rs.getString("industry"),
-            rs.getString("consolidation_approach"),
-            rs.getInt("base_year"),
-            OrganizationStatus.fromDb(rs.getString("status")),
-            rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-            rs.getObject("updated_at", OffsetDateTime.class).toInstant());
+    static final RowMapper<Organization> MAPPER = (rs, rowNum) -> {
+        OffsetDateTime changedAt = rs.getObject("status_changed_at", OffsetDateTime.class);
+        return new Organization(
+                rs.getString("id"),
+                rs.getString("name"),
+                rs.getString("tax_id"),
+                rs.getString("country"),
+                rs.getString("industry"),
+                rs.getString("consolidation_approach"),
+                rs.getInt("base_year"),
+                OrganizationStatus.fromDb(rs.getString("status")),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+                changedAt == null ? null : changedAt.toInstant(),
+                rs.getString("status_changed_by"),
+                rs.getString("status_note"));
+    };
 
     private final JdbcTemplate jdbc;
 
@@ -98,12 +107,19 @@ public class OrganizationRepository {
         return updated;
     }
 
-    /** Lifecycle transition written by the platform administration endpoints (V8). */
-    public int updateStatus(String organizationId, OrganizationStatus status, String changedByUserId, String note) {
+    /**
+     * Lifecycle transition written by the platform administration endpoints
+     * (V8). Guarded by {@code AND status = expected} so a concurrent
+     * transition cannot be overwritten silently (task 7.7): 0 means the
+     * organization's status moved between read and write and the caller must
+     * answer 409 rather than apply a stale transition.
+     */
+    public int updateStatus(String organizationId, OrganizationStatus status,
+                            OrganizationStatus expectedStatus, String changedByUserId, String note) {
         return jdbc.update(
                 "UPDATE organizations SET status = ?, status_changed_at = CURRENT_TIMESTAMP, "
                         + "status_changed_by = ?, status_note = ?, updated_at = CURRENT_TIMESTAMP "
-                        + "WHERE id = ?",
-                status.name(), changedByUserId, note, organizationId);
+                        + "WHERE id = ? AND status = ?",
+                status.name(), changedByUserId, note, organizationId, expectedStatus.name());
     }
 }

@@ -1,5 +1,6 @@
 package com.carbonflow.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public class TrendInsightsDto {
@@ -37,13 +38,13 @@ public class TrendInsightsDto {
     public static class Summary {
         private String headline;
         private String overallTrajectory;
-        private double confidenceScore;
+        private BigDecimal confidenceScore;
         private String periodRange;
         private List<String> keyObservations;
 
         public Summary() {}
 
-        public Summary(String headline, String overallTrajectory, double confidenceScore, String periodRange, List<String> keyObservations) {
+        public Summary(String headline, String overallTrajectory, BigDecimal confidenceScore, String periodRange, List<String> keyObservations) {
             this.headline = headline;
             this.overallTrajectory = overallTrajectory;
             this.confidenceScore = confidenceScore;
@@ -57,8 +58,8 @@ public class TrendInsightsDto {
         public String getOverallTrajectory() { return overallTrajectory; }
         public void setOverallTrajectory(String overallTrajectory) { this.overallTrajectory = overallTrajectory; }
 
-        public double getConfidenceScore() { return confidenceScore; }
-        public void setConfidenceScore(double confidenceScore) { this.confidenceScore = confidenceScore; }
+        public BigDecimal getConfidenceScore() { return confidenceScore; }
+        public void setConfidenceScore(BigDecimal confidenceScore) { this.confidenceScore = confidenceScore; }
 
         public String getPeriodRange() { return periodRange; }
         public void setPeriodRange(String periodRange) { this.periodRange = periodRange; }
@@ -121,14 +122,14 @@ public class TrendInsightsDto {
         private String priority;
         private String title;
         private String description;
-        private double estimatedReductionTonnes;
+        private BigDecimal estimatedReductionTonnes;
         private String paybackPeriod;
         private String feasibility;
         private String ghgProtocolGuidance;
 
         public ReductionOpportunity() {}
 
-        public ReductionOpportunity(String id, String category, String priority, String title, String description, double estimatedReductionTonnes, String paybackPeriod, String feasibility, String ghgProtocolGuidance) {
+        public ReductionOpportunity(String id, String category, String priority, String title, String description, BigDecimal estimatedReductionTonnes, String paybackPeriod, String feasibility, String ghgProtocolGuidance) {
             this.id = id;
             this.category = category;
             this.priority = priority;
@@ -155,8 +156,8 @@ public class TrendInsightsDto {
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
 
-        public double getEstimatedReductionTonnes() { return estimatedReductionTonnes; }
-        public void setEstimatedReductionTonnes(double estimatedReductionTonnes) { this.estimatedReductionTonnes = estimatedReductionTonnes; }
+        public BigDecimal getEstimatedReductionTonnes() { return estimatedReductionTonnes; }
+        public void setEstimatedReductionTonnes(BigDecimal estimatedReductionTonnes) { this.estimatedReductionTonnes = estimatedReductionTonnes; }
 
         public String getPaybackPeriod() { return paybackPeriod; }
         public void setPaybackPeriod(String paybackPeriod) { this.paybackPeriod = paybackPeriod; }

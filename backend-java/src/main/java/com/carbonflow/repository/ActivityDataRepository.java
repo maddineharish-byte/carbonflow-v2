@@ -105,6 +105,15 @@ public class ActivityDataRepository {
         return count != null && count > 0;
     }
 
+    /** Phase 7 period summary: activity rows belonging to one reporting period. */
+    public int countForPeriod(String organizationId, String periodId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM activity_data "
+                        + "WHERE organization_id = ? AND reporting_period_id = ?",
+                Integer.class, organizationId, periodId);
+        return count == null ? 0 : count;
+    }
+
     /**
      * Node's {@code listActivity}: optional period/facility/scope filters,
      * ordered {@code start_date DESC, created_at DESC}. Filters are validated

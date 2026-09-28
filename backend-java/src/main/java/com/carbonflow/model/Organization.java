@@ -26,6 +26,10 @@ public class Organization {
     private OrganizationStatus status;
     private Instant createdAt;
     private Instant updatedAt;
+    /** V8 audit columns — null until a platform transition happened. */
+    private Instant statusChangedAt;
+    private String statusChangedBy;
+    private String statusNote;
 
     public Organization() {
     }
@@ -33,6 +37,14 @@ public class Organization {
     public Organization(String id, String name, String taxId, String country, String industry,
                         String consolidationApproach, int baseYear, OrganizationStatus status,
                         Instant createdAt, Instant updatedAt) {
+        this(id, name, taxId, country, industry, consolidationApproach, baseYear, status,
+                createdAt, updatedAt, null, null, null);
+    }
+
+    public Organization(String id, String name, String taxId, String country, String industry,
+                        String consolidationApproach, int baseYear, OrganizationStatus status,
+                        Instant createdAt, Instant updatedAt, Instant statusChangedAt,
+                        String statusChangedBy, String statusNote) {
         this.id = id;
         this.name = name;
         this.taxId = taxId;
@@ -43,6 +55,9 @@ public class Organization {
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.statusChangedAt = statusChangedAt;
+        this.statusChangedBy = statusChangedBy;
+        this.statusNote = statusNote;
     }
 
     public String getId() { return id; }
@@ -74,4 +89,13 @@ public class Organization {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public Instant getStatusChangedAt() { return statusChangedAt; }
+    public void setStatusChangedAt(Instant statusChangedAt) { this.statusChangedAt = statusChangedAt; }
+
+    public String getStatusChangedBy() { return statusChangedBy; }
+    public void setStatusChangedBy(String statusChangedBy) { this.statusChangedBy = statusChangedBy; }
+
+    public String getStatusNote() { return statusNote; }
+    public void setStatusNote(String statusNote) { this.statusNote = statusNote; }
 }

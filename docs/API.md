@@ -148,18 +148,24 @@ Java (Phase 5, ADR-016) matches the Node upload chain in order — `FILE_MISSING
 - `DELETE /api/v1/evidence/:id` — Governed delete (`evidence.delete`): the row and its versions/links cascade and stored files are removed best-effort; while the evidence is linked to an audit → 409 `EVIDENCE_IN_USE`.
 
 ### 2.8 Inventory Snapshots, Targets & Reduction Projects
-- `GET  /api/v1/inventory` — List inventory snapshots (`inventory.read`).
-- `POST /api/v1/inventory/snapshot` — Generate immutable inventory snapshot (`inventory.create`).
-- `POST /api/v1/inventory/:id/lock` — Lock inventory period (`inventory.lock`).
-- `GET  /api/v1/targets` — List carbon targets (`targets.read`).
-- `POST /api/v1/targets` — Create carbon target (`targets.create`).
-- `GET  /api/v1/reduction-projects` — List reduction projects (`reduction_projects.read`).
-- `POST /api/v1/reduction-projects` — Create reduction project (`reduction_projects.create`).
+- `GET  /api/v1/inventory` — List inventory snapshots, newest first (`inventory.read`).
+- `POST /api/v1/inventory/snapshot` — Generate an immutable inventory snapshot from persisted emission records (`inventory.create`): `{ "reportingPeriodId": "<uuid>" }`. 201 `Immutable inventory snapshot created.`; 404 `REPORTING_PERIOD_NOT_FOUND` for malformed/foreign period ids (identical bodies); 409 `INVENTORY_SNAPSHOT_LOCKED` when the period's snapshot is already LOCKED (re-snapshotting an ACTIVE one supersedes it → prior row `REVERTED`). The snapshot carries the reproducible hash `sha256(org|period|s1|location|market)` over stored values (ADR-019) and is a read of accounting state — creating one on a locked accounting period is allowed.
+- `POST /api/v1/inventory/:id/lock` — Lock the inventory snapshot (`inventory.lock`). 200 `Inventory snapshot locked.` (`ACTIVE` → `LOCKED`); 409 `INVENTORY_SNAPSHOT_LOCKED` when already locked; 409 `INVENTORY_SNAPSHOT_REVERTED` when superseded; malformed/foreign ids → 404 `INVENTORY_SNAPSHOT_NOT_FOUND` (identical bodies).
+- `GET  /api/v1/targets` — List carbon targets, newest first (`targets.read`); each row carries read-time progress (`plannedReductionT`, `currentLocationBasedT`/`currentMarketBasedT`, `progressLocationPct`/`progressMarketPct` — null until the baseline period has emission records; status is never auto-flipped).
+- `POST /api/v1/targets` — Create carbon target (`targets.create`): `name`, `baselinePeriodId`, `targetPeriodId`, `baselineValueT`, `targetValueT`, `reductionPercentage` required (values ≥ 0, percentage 0–100). Status is forced `ON_TRACK`, `ownerId` = caller; 404 `REPORTING_PERIOD_NOT_FOUND` for malformed/foreign period ids; 400 `VALIDATION_ERROR` otherwise. 201 `Carbon target created.`
+- `PUT  /api/v1/targets/:id` — Partial update (`targets.update`): omitted/`null` fields keep their value, blank `notes` clears; `status` ∈ {`ON_TRACK`,`BEHIND`,`ACHIEVED`,`EXPIRED`}; immutable `id`/`organizationId`/`ownerId`/`createdAt`. 404 `CARBON_TARGET_NOT_FOUND` for malformed/foreign ids (identical bodies).
+- `GET  /api/v1/reduction-projects` — List reduction projects, newest first (`reduction_projects.read`).
+- `POST /api/v1/reduction-projects` — Create reduction project (`reduction_projects.create`): `name` and `startDate` required (`YYYY-MM-DD`), `endDate` ≥ `startDate`; numeric fields default to 0, `status` defaults `PLANNED`; `facilityId`/`targetId` are tenant-validated → 404 `FACILITY_NOT_FOUND`/`CARBON_TARGET_NOT_FOUND`. 201 `Reduction project created.`
+- `PUT  /api/v1/reduction-projects/:id` — Partial update (`reduction_projects.update`): `null` keeps, blank clears; 404 `REDUCTION_PROJECT_NOT_FOUND` for malformed/foreign ids. 200 `Reduction project updated.`
+- Reports never write emission records; all reads are tenant-predicated from the authenticated context.
 
 ### 2.9 Analytics & Reports
-- `GET  /api/v1/analytics/dashboard` — Executive summary KPIs, Scope breakdown, audit progress (`analytics.read`).
-- `GET  /api/v1/analytics/breakdown` — Detailed scope, facility, and trend series.
-- `GET  /api/v1/reports/export` — Export CSV format for emissions ledger and audit packs (`reports.read`).
+- `GET  /api/v1/analytics/dashboard` — Executive summary KPIs for the authenticated tenant (`analytics.read`): `DashboardSummary` with `scope1Tonnes`, `scope2LocationTonnes`/`scope2MarketTonnes` and location-basis `totalTonnes` (2dp HALF_UP, both Scope 2 perspectives never summed), audit progress and breakdown series — all aggregated from persisted emission records.
+- `POST /api/v1/analytics/trend-insights` — Period-over-period trend series + narrative (`analytics.read`). The narrative is generated deterministically in-process (`modelUsed = "carbonflow-deterministic-analytics"`); no external LLM and no fabricated months — fewer than two reporting periods answers an insufficient-data state (ADR-018; the Node oracle sends the same computed trends to a Gemini LLM, which is not reproducible and was not copied).
+- `GET  /api/v1/analytics/periods/:id/summary` — One-period summary (`analytics.read`): identity, ledger totals (4dp HALF_UP, per-basis totals separate), source counts (`activityData`/`calculations`/`emissionRecords`), facility coverage and governance (`governance.locked` mirrors the accounting lock, plus `auditId`/`auditStatus`). Malformed/foreign/missing period ids → 404 `REPORTING_PERIOD_NOT_FOUND` (identical bodies).
+- `GET  /api/v1/analytics/breakdown?dimension=&periodId=` — Aggregated rows (`analytics.read`) for `dimension` ∈ {`facility`,`legal_entity`,`scope`,`category`,`period`}; rows carry both Scope 2 perspectives side by side (2dp HALF_UP, deterministic ordering). Missing/unknown dimension → 400 `VALIDATION_ERROR`; `dimension=period` with `periodId` → 400; malformed/foreign `periodId` → 404 `REPORTING_PERIOD_NOT_FOUND`.
+- `GET  /api/v1/reports/export-csv?periodId=&facilityId=&scope=&scope2Type=` — CSV export of the **ACTIVE** emission ledger (`reports.read`), 14 columns, deterministic `created_at DESC, id DESC` ordering with `\n` line endings. All four filters are validated before use: malformed UUIDs → 400 `VALIDATION_ERROR`, unknown enum values → 400, a well-formed foreign id → 200 with a header-only (empty) export — no existence leak. Every cell passes the reference's CSV guard: a leading `=`/`+`/`-`/`@` (spreadsheet formula injection) is prefixed with `'`, embedded quotes are doubled, and cells are quoted.
+  > Earlier drafts of this document listed `GET /api/v1/reports/export`; the implemented (and Node-parity) route is `/api/v1/reports/export-csv`.
 
 ### 2.10 Tenant User Administration & Platform Tenants (greenfield — Java only)
 > **Not part of the Node reference contract.** The Node backend has no users or platform endpoints; these were specified in Phase 3 (ADR-014) because registration/approval and tenant user administration require them. They follow the standard envelope and permission model.
@@ -172,8 +178,10 @@ Tenant user administration (all scoped to the caller's organization; `users.read
 - `POST /api/v1/users/:id/enable` — Reactivate.
 
 Platform tenant administration (permissions `platform.tenants.read` / `platform.tenants.manage`, held only by `PLATFORM_ADMIN`):
-- `GET  /api/v1/platform/tenants?status=` — List organizations by lifecycle status (`PENDING_ACTIVATION`, `ACTIVE`, `REJECTED`, `SUSPENDED`).
+- `GET  /api/v1/platform/tenants?status=` — List organizations by lifecycle status (`PENDING_ACTIVATION`, `ACTIVE`, `REJECTED`, `SUSPENDED`); rows include the V8 audit columns (`statusChangedAt`, `statusChangedBy`, `statusNote`) once a transition happened (absent while null).
+- `GET  /api/v1/platform/tenants/:id` — Tenant detail (full row incl. the V8 audit columns). Malformed and unknown ids answer the same 404 `ORGANIZATION_NOT_FOUND` body.
 - `POST /api/v1/platform/tenants/:id/approve` — `PENDING_ACTIVATION|REJECTED|SUSPENDED` → `ACTIVE` ("Organization approved.").
-- `POST /api/v1/platform/tenants/:id/reject` — → `REJECTED` ("Organization rejected."), optional `{ "note": "..." }`.
-- `POST /api/v1/platform/tenants/:id/suspend` — → `SUSPENDED` ("Organization suspended."), optional `{ "note": "..." }`.
+- `POST /api/v1/platform/tenants/:id/reject` — `PENDING_ACTIVATION` → `REJECTED` ("Organization rejected."), optional `{ "note": "..." }`.
+- `POST /api/v1/platform/tenants/:id/suspend` — `ACTIVE` → `SUSPENDED` ("Organization suspended."), optional `{ "note": "..." }`.
+- **Transitions are validated against the from-state** (the documented state machine; ADR-020): any other source state answers 409 `INVALID_STATUS_TRANSITION` (`"Organization status transition from X to Y is not allowed."`) and leaves the row untouched — the SQL write is guarded by the expected current status, so a concurrent transition cannot be overwritten. Reactivation is `approve` from `SUSPENDED`/`REJECTED`; "request more information" is not part of the lifecycle (documented gap). Malformed/unknown ids → 404 `ORGANIZATION_NOT_FOUND` (identical bodies, never a 500).
 - Transitions record actor (`status_changed_by`), time and note (V8 columns). A non-`ACTIVE` organization can neither log in (403 `ORGANIZATION_NOT_ACTIVE` with a per-status message) nor refresh (401 `REFRESH_MEMBERSHIP_INVALID`); already-issued access tokens drain within their 15-minute lifetime.
