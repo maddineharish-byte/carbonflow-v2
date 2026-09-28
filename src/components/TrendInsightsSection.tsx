@@ -1,6 +1,8 @@
 /**
- * CarbonFlow — AI Trend Insights & Anomaly Detection Component
- * Powered by Gemini API to analyze multi-period emissions data and recommend reduction pathways.
+ * CarbonFlow — Trend Insights & Anomaly Detection Component
+ * Powered by the backend's deterministic in-process analytics engine
+ * (no external LLM): period-over-period deltas, thresholds and
+ * rule-based observations computed from persisted emission records.
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -48,7 +50,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
       setInsights(data);
     } catch (err: any) {
       console.error('Failed to load trend insights:', err);
-      setError(err?.message || 'Failed to analyze trend data with Gemini.');
+      setError(err?.message || 'Failed to analyze trend data.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -120,7 +122,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
               </h2>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-emerald-950/70 border border-emerald-600/40 text-emerald-400 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Gemini 3.8 Flash
+                Deterministic Engine
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
@@ -182,7 +184,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
             onClick={() => fetchInsights(true)}
             disabled={loading || refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg transition disabled:opacity-50"
-            title="Re-run Gemini trend analysis"
+            title="Re-run trend analysis"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-400' : ''}`} />
             <span className="hidden md:inline">{refreshing ? 'Analyzing...' : 'Refresh'}</span>
@@ -196,7 +198,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 animate-pulse">
             <Sparkles className="w-6 h-6" />
           </div>
-          <div className="text-sm font-semibold text-white">Analyzing 12-Period Emissions Trajectory...</div>
+          <div className="text-sm font-semibold text-white">Analyzing emissions trajectory…</div>
           <div className="text-xs text-slate-400 max-w-sm mt-1">
             Evaluating Scope 1 stationary fuel profiles, Scope 2 contractual market instruments, and seasonal variances
           </div>

@@ -31,15 +31,25 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
   // New activity form states
   const [selectedFacility, setSelectedFacility] = useState(facilities[0]?.id || '');
   const [selectedPeriod, setSelectedPeriod] = useState(periods[0]?.id || '');
+  // Dates default to the selected reporting period's span — no hardcoded dates.
+  const [startDate, setStartDate] = useState(periods[0]?.startDate || '');
+  const [endDate, setEndDate] = useState(periods[0]?.endDate || '');
   const [scope, setScope] = useState<'SCOPE_1' | 'SCOPE_2'>('SCOPE_1');
   const [category, setCategory] = useState('STATIONARY_COMBUSTION');
   const [activityType, setActivityType] = useState('NATURAL_GAS');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('kWh');
   const [source, setSource] = useState('Utility Meter Invoice');
-  const [startDate, setStartDate] = useState('2024-01-01');
-  const [endDate, setEndDate] = useState('2024-12-31');
   const [notes, setNotes] = useState('');
+
+  const handlePeriodChange = (periodId: string) => {
+    setSelectedPeriod(periodId);
+    const period = periods.find((p) => p.id === periodId);
+    if (period) {
+      setStartDate(period.startDate);
+      setEndDate(period.endDate);
+    }
+  };
 
   const filtered = activities.filter((a) => {
     if (filterScope !== 'ALL' && a.scope !== filterScope) return false;
@@ -146,7 +156,20 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {filtered.map((act) => (
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <Database className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                    <div className="text-sm font-semibold text-slate-300">No activity records</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {activities.length === 0
+                        ? 'Log your first activity data record to begin the carbon accounting flow.'
+                        : 'No records match the current filters.'}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((act) => (
                 <tr key={act.id} className="hover:bg-slate-800/50 transition">
                   <td className="px-4 py-3 font-medium text-white">{act.facilityName}</td>
                   <td className="px-4 py-3">
@@ -202,7 +225,8 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -240,7 +264,7 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
                   <label className="block text-slate-300 mb-1 font-medium">Reporting Period</label>
                   <select
                     value={selectedPeriod}
-                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                    onChange={(e) => handlePeriodChange(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                   >
                     {periods.map((p) => (
@@ -249,6 +273,29 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 mb-1 font-medium">Start Date</label>
+                  <input
+                    required
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1 font-medium">End Date</label>
+                  <input
+                    required
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
                 </div>
               </div>
 

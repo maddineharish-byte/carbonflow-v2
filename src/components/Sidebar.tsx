@@ -1,5 +1,8 @@
 /**
  * CarbonFlow — Main Navigation Sidebar
+ * Phase 8: items are gated on the backend session's permission codes
+ * (frozen 44-code matrix). Hiding is UX only — the backend remains the
+ * security boundary.
  */
 import React from 'react';
 import {
@@ -12,45 +15,70 @@ import {
   FolderLock,
   Target,
   FlaskConical,
+  Boxes,
+  ChartLine,
+  Users,
+  ShieldCheck,
 } from 'lucide-react';
 import { NavView } from '../types.ts';
+import { hasPermission } from '../services/permissions.ts';
 
 interface SidebarProps {
   currentView: NavView;
   onSelectView: (view: NavView) => void;
   auditBadge?: string;
   testPassedCount?: number;
+  permissions: string[];
 }
 
 interface NavItem {
   view: NavView;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Frozen-matrix permission code required to see this item. */
+  permission: string;
   badge?: string;
 }
+
+const NAV_ITEMS: NavItem[] = [
+  { view: 'DASHBOARD', label: 'Executive Dashboard', icon: LayoutDashboard, permission: 'analytics.read' },
+  { view: 'BOUNDARIES', label: 'Boundaries & Facilities', icon: Building, permission: 'facilities.read' },
+  { view: 'ACTIVITY_DATA', label: 'Activity Data Collection', icon: Database, permission: 'activity_data.read' },
+  { view: 'EMISSIONS', label: 'Calculations & Ledger', icon: Calculator, permission: 'reports.read' },
+  { view: 'FACTORS', label: 'Emission Factors & GWP', icon: Layers, permission: 'emission_factors.read' },
+  { view: 'AUDIT', label: 'Audit & Governance', icon: FileCheck2, permission: 'audits.read', badge: undefined },
+  { view: 'EVIDENCE', label: 'Evidence Vault', icon: FolderLock, permission: 'evidence.read' },
+  { view: 'INVENTORY', label: 'Inventory Snapshots', icon: Boxes, permission: 'inventory.read' },
+  { view: 'ANALYTICS', label: 'Analytics & Breakdowns', icon: ChartLine, permission: 'analytics.read' },
+  { view: 'TARGETS', label: 'Targets & Projects', icon: Target, permission: 'targets.read' },
+  { view: 'ADMIN', label: 'Company Administration', icon: Users, permission: 'users.read' },
+  { view: 'PLATFORM_ADMIN', label: 'Platform Administration', icon: ShieldCheck, permission: 'platform.tenants.read' },
+  {
+    view: 'TEST_SUITE',
+    label: 'Automated Test Suite',
+    icon: FlaskConical,
+    permission: 'platform.tenants.manage',
+    badge: undefined,
+  },
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onSelectView,
   auditBadge,
   testPassedCount,
+  permissions,
 }) => {
-  const items: NavItem[] = [
-    { view: 'DASHBOARD', label: 'Executive Dashboard', icon: LayoutDashboard },
-    { view: 'BOUNDARIES', label: 'Boundaries & Facilities', icon: Building },
-    { view: 'ACTIVITY_DATA', label: 'Activity Data Collection', icon: Database },
-    { view: 'EMISSIONS', label: 'Calculations & Ledger', icon: Calculator },
-    { view: 'FACTORS', label: 'Emission Factors & GWP', icon: Layers },
-    { view: 'AUDIT', label: 'Audit & Governance', icon: FileCheck2, badge: auditBadge },
-    { view: 'EVIDENCE', label: 'Evidence Vault', icon: FolderLock },
-    { view: 'TARGETS', label: 'Targets & Projects', icon: Target },
-    {
-      view: 'TEST_SUITE',
-      label: 'Automated Test Suite',
-      icon: FlaskConical,
-      badge: testPassedCount !== undefined ? `${testPassedCount} PASS` : undefined,
-    },
-  ];
+  // Each item carries its own badge resolver (audit status / test count).
+  const badgeFor = (view: NavView): string | undefined => {
+    if (view === 'AUDIT') return auditBadge;
+    if (view === 'TEST_SUITE') {
+      return testPassedCount !== undefined ? `${testPassedCount} PASS` : undefined;
+    }
+    return undefined;
+  };
+
+  const visibleItems = NAV_ITEMS.filter((item) => hasPermission(permissions, item.permission));
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col justify-between p-4 shrink-0 min-h-[calc(100vh-57px)]">
@@ -58,9 +86,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-3 py-2">
           Enterprise Accounting
         </div>
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.view;
+          const badge = badgeFor(item.view);
           return (
             <button
               key={item.view}
@@ -76,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <span>{item.label}</span>
               </div>
-              {item.badge && (
+              {badge && (
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                     item.view === 'TEST_SUITE'
@@ -84,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'bg-amber-950 text-amber-300 border border-amber-800'
                   }`}
                 >
-                  {item.badge}
+                  {badge}
                 </span>
               )}
             </button>
@@ -97,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           Tenant Isolation Active
         </div>
-        <div>All queries cryptographically bound to authenticated Organization ID.</div>
+        <div>All queries are tenant-scoped through the authenticated session.</div>
       </div>
     </aside>
   );

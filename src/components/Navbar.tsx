@@ -14,6 +14,7 @@ interface NavbarProps {
   onSwitchTenant: (orgId: string) => void;
   onSwitchRole: (role: RoleName) => void;
   onRefresh: () => void;
+  onExport: () => void;
   onLogout: () => void;
   isLoading: boolean;
 }
@@ -38,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchTenant,
   onSwitchRole,
   onRefresh,
+  onExport,
   onLogout,
   isLoading,
 }) => {
@@ -70,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 PRO Enterprise
               </span>
             </div>
-            <div className="text-xs text-slate-400">GHG Protocol & ISO 14064-1 Compliant</div>
+            <div className="text-xs text-slate-400">GHG accounting workspace for your organization.</div>
           </div>
         </div>
 
@@ -119,16 +121,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           </select>
         </div>
 
-        {/* Export Button */}
-        <a
-          href="/api/v1/reports/export-csv"
-          download="carbonflow_ledger.csv"
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition"
+        {/* Export Button — authenticated blob download (never a browser link) */}
+        <button
+          onClick={onExport}
+          disabled={isLoading}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition disabled:opacity-50"
           title="Download full audited ledger as CSV"
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
           Export Ledger
-        </a>
+        </button>
 
         {/* Refresh button */}
         <button

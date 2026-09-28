@@ -14,12 +14,18 @@ import {
   Send,
   RotateCcw,
   Check,
+  Plus,
 } from 'lucide-react';
-import { AuditDetail, AuditStatus, RoleName } from '../types.ts';
+import { AuditDetail, AuditStatus, RoleName, ReportingPeriod } from '../types.ts';
+import { api } from '../services/api.ts';
+import { hasPermission } from '../services/permissions.ts';
 
 interface AuditViewProps {
   audit: AuditDetail | null;
   currentRole: RoleName | null;
+  permissions: string[];
+  periods: ReportingPeriod[];
+  onCreateAudit: (reportingPeriodId: string) => void;
   onTransition: (targetState: AuditStatus, reason?: string) => void;
   onVerifyChecklist: (itemId: string, isSatisfied: boolean, notes?: string) => void;
   onCreateFinding: (data: any) => void;
@@ -38,9 +44,40 @@ const AUDIT_STAGES: AuditStatus[] = [
   'LOCKED',
 ];
 
+/**
+ * The backend's legal transitions (AuditStateMachine). The frontend only
+ * renders these buttons — the server still validates every request.
+ */
+const ALLOWED_TRANSITIONS: Record<string, AuditStatus[]> = {
+  DRAFT: ['SUBMITTED'],
+  SUBMITTED: ['DATA_COLLECTION'],
+  DATA_COLLECTION: ['VALIDATION'],
+  VALIDATION: ['REVIEW'],
+  REVIEW: ['APPROVED', 'CORRECTION_REQUESTED', 'REJECTED'],
+  CORRECTION_REQUESTED: ['DATA_COLLECTION'],
+  REJECTED: ['DATA_COLLECTION'],
+  APPROVED: ['AUDIT_READY'],
+  AUDIT_READY: ['LOCKED'],
+};
+
+const TRANSITION_LABELS: Record<string, { label: string; reason: string; style: string }> = {
+  SUBMITTED: { label: 'Submit Audit', reason: 'Audit package submitted for data collection.', style: 'bg-sky-600 hover:bg-sky-500 text-white' },
+  DATA_COLLECTION: { label: 'Begin Validation', reason: 'Data collection complete; moving to validation.', style: 'bg-blue-600 hover:bg-blue-500 text-white' },
+  VALIDATION: { label: 'Send to Review', reason: 'Validation complete; ready for reviewer assessment.', style: 'bg-indigo-600 hover:bg-indigo-500 text-white' },
+  REVIEW: { label: 'Open Review', reason: 'Passed validation; entering review.', style: 'bg-indigo-600 hover:bg-indigo-500 text-white' },
+  APPROVED: { label: 'Approve Audit', reason: 'All checklist items and finding reconciliations satisfied.', style: 'bg-emerald-600 hover:bg-emerald-500 text-white' },
+  CORRECTION_REQUESTED: { label: 'Request Correction', reason: 'Clarifications required on evidence attachments.', style: 'bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800' },
+  REJECTED: { label: 'Reject Audit', reason: 'Audit package rejected after review.', style: 'bg-rose-600 hover:bg-rose-500 text-white' },
+  AUDIT_READY: { label: 'Mark Audit Ready', reason: 'Ready for final lock and assurance submission.', style: 'bg-blue-600 hover:bg-blue-500 text-white' },
+  LOCKED: { label: 'Lock Inventory Cycle', reason: 'Final inventory sign-off. Ledger frozen.', style: 'bg-purple-600 hover:bg-purple-500 text-white' },
+};
+
 export const AuditView: React.FC<AuditViewProps> = ({
   audit,
   currentRole,
+  permissions,
+  periods,
+  onCreateAudit,
   onTransition,
   onVerifyChecklist,
   onCreateFinding,
@@ -52,13 +89,60 @@ export const AuditView: React.FC<AuditViewProps> = ({
   const [findingTitle, setFindingTitle] = useState('');
   const [findingDesc, setFindingDesc] = useState('');
   const [findingSeverity, setFindingSeverity] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM');
+  const [newAuditPeriodId, setNewAuditPeriodId] = useState('');
+
+  const canCreateAudit = hasPermission(permissions, 'audits.create');
 
   if (!audit) {
-    return <div className="p-8 text-slate-400">Loading audit workspace...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-white tracking-tight">Audit & Assurance Room</h1>
+            <p className="text-xs text-slate-400 mt-1">No audit is currently in progress for this organization.</p>
+          </div>
+          {canCreateAudit && (
+            <div className="flex items-center gap-2">
+              <select
+                value={newAuditPeriodId}
+                onChange={(e) => setNewAuditPeriodId(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none"
+                aria-label="Reporting period for new audit"
+              >
+                <option value="">Select period…</option>
+                {periods.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  if (newAuditPeriodId) onCreateAudit(newAuditPeriodId);
+                }}
+                disabled={!newAuditPeriodId}
+                className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                Initiate Audit
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+          <FileCheck2 className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+          <div className="text-sm font-semibold text-slate-300">No audit workspace</div>
+          <div className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            {canCreateAudit
+              ? 'Initiate an audit against a reporting period to begin the governed workflow.'
+              : 'Your role cannot initiate audits. Contact a sustainability manager or carbon accountant.'}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const currentStageIndex = AUDIT_STAGES.indexOf(audit.status);
   const isCorrection = audit.status === 'CORRECTION_REQUESTED';
+  const allowedTargets = ALLOWED_TRANSITIONS[audit.status] ?? [];
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,58 +182,36 @@ export const AuditView: React.FC<AuditViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Period: {audit.period?.name || 'FY2024'} | Governed by ISO 14064-3 Third-Party Verification Standards.
+            Period: {audit.period?.name ?? '—'} | State transitions are governed by the backend audit state machine.
           </p>
         </div>
 
-        {/* Transition Controls */}
+        {/* Transition Controls — rendered from the backend's legal transitions;
+            the server remains the authority on what is allowed. */}
         <div className="flex flex-wrap items-center gap-2">
-          {audit.status === 'REVIEW' && (
-            <>
+          {allowedTargets.map((target) => {
+            const config = TRANSITION_LABELS[target];
+            return (
               <button
-                onClick={() => onTransition('CORRECTION_REQUESTED', 'Clarifications required on evidence attachments.')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800 text-xs font-semibold rounded-lg transition"
+                key={target}
+                onClick={() => onTransition(target, config.reason)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg shadow transition ${config.style}`}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Request Correction
+                {target === 'CORRECTION_REQUESTED' ? (
+                  <RotateCcw className="w-3.5 h-3.5" />
+                ) : target === 'APPROVED' ? (
+                  <Check className="w-4 h-4" />
+                ) : target === 'LOCKED' ? (
+                  <Lock className="w-4 h-4" />
+                ) : (
+                  <ArrowRight className="w-3.5 h-3.5" />
+                )}
+                {config.label}
               </button>
-              <button
-                onClick={() => onTransition('APPROVED', 'All checklist items and finding reconciliations satisfied.')}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition"
-              >
-                <Check className="w-4 h-4" />
-                Approve Audit
-              </button>
-            </>
-          )}
-
-          {audit.status === 'APPROVED' && (
-            <button
-              onClick={() => onTransition('AUDIT_READY', 'Ready for final lock and external assurance submission.')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow transition"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Mark Audit Ready
-            </button>
-          )}
-
-          {audit.status === 'AUDIT_READY' && (
-            <button
-              onClick={() => onTransition('LOCKED', 'Final inventory sign-off. Ledger frozen.')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg shadow transition"
-            >
-              <Lock className="w-4 h-4" />
-              Lock Inventory Cycle
-            </button>
-          )}
-
-          {audit.status === 'CORRECTION_REQUESTED' && (
-            <button
-              onClick={() => onTransition('DATA_COLLECTION', 'Reopened for data owner corrections.')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg transition"
-            >
-              Re-open Data Collection
-            </button>
+            );
+          })}
+          {allowedTargets.length === 0 && (
+            <span className="text-xs text-slate-500">This audit is in a terminal state.</span>
           )}
         </div>
       </div>

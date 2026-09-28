@@ -3,10 +3,11 @@
  */
 import React from 'react';
 import { Layers, Globe2, BookOpen, ShieldCheck } from 'lucide-react';
+import { EmissionFactor, GwpSet } from '../types.ts';
 
 interface FactorsViewProps {
-  gwpSets: any[];
-  emissionFactors: any[];
+  gwpSets: GwpSet[];
+  emissionFactors: EmissionFactor[];
 }
 
 export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFactors }) => {
@@ -28,7 +29,12 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {gwpSets.map((set) => (
+          {gwpSets.length === 0 ? (
+            <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500">
+              No GWP reference sets available.
+            </div>
+          ) : (
+            gwpSets.map((set) => (
             <div
               key={set.id}
               className={`bg-slate-900 rounded-xl p-5 border ${
@@ -48,29 +54,21 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
 
               <div className="mt-4 pt-3 border-t border-slate-800 space-y-1.5 text-xs font-mono">
                 <div className="text-[10px] uppercase font-bold text-slate-500">100-Year Horizon Multipliers:</div>
-                <div className="flex justify-between text-slate-300">
-                  <span>Carbon Dioxide (CO₂)</span>
-                  <span className="font-bold text-white">1.0</span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span>Methane (CH₄)</span>
-                  <span className="font-bold text-emerald-400">
-                    {set.code === 'IPCC_AR6' ? '27.9' : set.code === 'IPCC_AR5' ? '28.0' : '25.0'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span>Nitrous Oxide (N₂O)</span>
-                  <span className="font-bold text-sky-400">
-                    {set.code === 'IPCC_AR6' ? '273.0' : set.code === 'IPCC_AR5' ? '265.0' : '298.0'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span>Sulfur Hexafluoride (SF₆)</span>
-                  <span className="font-bold text-amber-400">25,200.0</span>
-                </div>
+                {set.values.length === 0 ? (
+                  <div className="text-slate-500">No GWP values published for this set.</div>
+                ) : (
+                  set.values.map((value) => (
+                    <div key={value.gas} className="flex justify-between text-slate-300">
+                      <span>{value.gas}</span>
+                      <span className="font-bold text-emerald-400">
+                        {Number(value.gwp100yr).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          ))}
+          )))}
         </div>
       </div>
 
@@ -102,7 +100,18 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {emissionFactors.map((f) => {
+              {emissionFactors.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <Layers className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                    <div className="text-sm font-semibold text-slate-300">No emission factors published</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      The factor library is managed by platform administrators.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                emissionFactors.map((f) => {
                 const activeVersion = f.versions?.find((v: any) => v.status === 'ACTIVE') || f.versions?.[0];
                 return (
                   <tr key={f.id} className="hover:bg-slate-800/50 transition">
@@ -134,7 +143,8 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

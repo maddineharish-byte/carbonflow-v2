@@ -83,7 +83,16 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
           <span className="text-xs text-slate-500">Live Regression Protocol</span>
         </div>
 
-        <div className="divide-y divide-slate-800">
+        {!testSuiteData ? (
+          <div className="p-12 text-center">
+            <FlaskConical className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+            <div className="text-sm font-semibold text-slate-300">Test suite not executed yet</div>
+            <div className="text-xs text-slate-500 mt-1">
+              Run the suite to validate tenant isolation, calculation precision and audit guards.
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
           {testSuiteData?.results.map((test) => (
             <div key={test.id} className="p-4 hover:bg-slate-800/50 transition flex items-start gap-4">
               <div className="mt-0.5">
@@ -115,7 +124,8 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

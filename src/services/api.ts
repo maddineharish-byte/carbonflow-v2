@@ -1,9 +1,39 @@
 /**
  * CarbonFlow — Client API Service
  * Handles Bearer token headers, consistent response envelopes, and error mapping.
+ *
+ * <p>Phase 8: the base URL comes from {@code VITE_JAVA_API_BASE_URL} (Vite
+ * env injection) so the React app talks to the Java backend — never a
+ * hardcoded origin. An empty/undefined value keeps same-origin relative
+ * paths (correct behind a reverse proxy). Tokens are never placed in URLs.
  */
 
-import { TrendInsightsResponse } from '../types.ts';
+import {
+  ActivityDataItem,
+  AuditDetail,
+  Boundary,
+  Breakdown,
+  Calculation,
+  CarbonTarget,
+  CarbonTargetInput,
+  DashboardSummary,
+  Department,
+  EmissionRecord,
+  EmissionsSummary,
+  EvidenceRecord,
+  Facility,
+  InventorySnapshot,
+  LegalEntity,
+  PeriodSummary,
+  PlatformTenant,
+  ReductionProject,
+  ReductionProjectInput,
+  ReportingPeriod,
+  TestSuiteResult,
+  TrendInsightsResponse,
+  UserAdmin,
+  UserAdminInput,
+} from '../types.ts';
 
 const ACCESS_TOKEN_STORAGE_KEY = 'cf_access_token';
 const REFRESH_TOKEN_STORAGE_KEY = 'cf_refresh_token';
@@ -12,6 +42,13 @@ let currentAccessToken: string | null = tokenStorage?.getItem(ACCESS_TOKEN_STORA
 let currentRefreshToken: string | null = tokenStorage?.getItem(REFRESH_TOKEN_STORAGE_KEY) ?? null;
 let unauthorizedHandler: (() => void) | null = null;
 let refreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Java backend origin from the build environment. Empty string = same-origin
+ * (relative `/api/v1/...`); set {@code VITE_JAVA_API_BASE_URL} (e.g.
+ * {@code http://localhost:8080}) to point the SPA at a dev Java server.
+ */
+const API_BASE_URL: string = (import.meta.env?.VITE_JAVA_API_BASE_URL as string | undefined) ?? '';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -77,7 +114,7 @@ async function refreshAccessToken(): Promise<boolean> {
   const tokenBeingRotated = currentRefreshToken;
   const operation = (async () => {
     try {
-      const response = await fetch('/api/v1/auth/refresh', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: tokenBeingRotated }),
@@ -120,7 +157,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}, allowRefr
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`/api/v1${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
     ...options,
     headers,
   });
@@ -190,12 +227,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getReportingPeriods: () => request<any[]>('/reporting-periods'),
-  createReportingPeriod: (data: any) =>
-    request<any>('/reporting-periods', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  getReportingPeriods: () => request<ReportingPeriod[]>('/reporting-periods'),
 
   // Reference Data
   getGwpSets: () => request<any[]>('/reference/gwp-sets'),
@@ -228,9 +260,11 @@ export const api = {
 
   // Emissions
   getEmissions: (periodId?: string) => {
-    const qs = periodId ? `?periodId=${periodId}` : '';
-    return request<any>(`/emissions${qs}`);
+    const qs = periodId ? `?periodId=${encodeURIComponent(periodId)}` : '';
+    return request<{ records: EmissionRecord[]; summary: EmissionsSummary }>(`/emissions${qs}`);
   },
+  getCalculation: (calculationId: string) =>
+    request<Calculation>(`/calculations/${encodeURIComponent(calculationId)}`),
 
   // Audits & Assurance
   getAudits: () => request<any[]>('/audits'),
@@ -274,7 +308,7 @@ export const api = {
     });
   },
   downloadEvidence: async (evidenceId: string, fileName: string): Promise<void> => {
-    const response = await fetch(`/api/v1/evidence/${encodeURIComponent(evidenceId)}/download`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/evidence/${encodeURIComponent(evidenceId)}/download`, {
       headers: { Authorization: `Bearer ${getAccessToken() || ''}` },
     });
     if (!response.ok) {
@@ -293,41 +327,150 @@ export const api = {
   },
 
   // Inventory & Targets
-  getInventory: () => request<any[]>('/inventory'),
+  getInventory: () => request<InventorySnapshot[]>('/inventory'),
   createInventorySnapshot: (reportingPeriodId: string) =>
-    request<any>('/inventory/snapshot', {
+    request<InventorySnapshot>('/inventory/snapshot', {
       method: 'POST',
       body: JSON.stringify({ reportingPeriodId }),
     }),
-  getTargets: () => request<any[]>('/targets'),
-  createTarget: (data: any) =>
-    request<any>('/targets', {
+  lockInventorySnapshot: (snapshotId: string) =>
+    request<InventorySnapshot>(`/inventory/${encodeURIComponent(snapshotId)}/lock`, {
+      method: 'POST',
+    }),
+  getTargets: () => request<CarbonTarget[]>('/targets'),
+  createTarget: (data: CarbonTargetInput) =>
+    request<CarbonTarget>('/targets', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getReductionProjects: () => request<any[]>('/reduction-projects'),
-  createReductionProject: (data: any) =>
-    request<any>('/reduction-projects', {
+  updateTarget: (targetId: string, data: Partial<CarbonTargetInput>) =>
+    request<CarbonTarget>(`/targets/${encodeURIComponent(targetId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getReductionProjects: () => request<ReductionProject[]>('/reduction-projects'),
+  createReductionProject: (data: ReductionProjectInput) =>
+    request<ReductionProject>('/reduction-projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateReductionProject: (projectId: string, data: Partial<ReductionProjectInput>) =>
+    request<ReductionProject>(`/reduction-projects/${encodeURIComponent(projectId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Platform administration (PLATFORM_ADMIN only)
+  getPlatformTenants: (status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request<PlatformTenant[]>(`/platform/tenants${qs}`);
+  },
+  getPlatformTenant: (organizationId: string) =>
+    request<PlatformTenant>(`/platform/tenants/${encodeURIComponent(organizationId)}`),
+  approveTenant: (organizationId: string) =>
+    request<PlatformTenant>(`/platform/tenants/${encodeURIComponent(organizationId)}/approve`, {
+      method: 'POST',
+    }),
+  rejectTenant: (organizationId: string, note?: string) =>
+    request<PlatformTenant>(`/platform/tenants/${encodeURIComponent(organizationId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+  suspendTenant: (organizationId: string, note?: string) =>
+    request<PlatformTenant>(`/platform/tenants/${encodeURIComponent(organizationId)}/suspend`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  // Company administration (users)
+  getUsers: () => request<UserAdmin[]>('/users'),
+  createUser: (data: UserAdminInput) =>
+    request<UserAdmin>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateUser: (userId: string, data: Partial<UserAdminInput>) =>
+    request<UserAdmin>(`/users/${encodeURIComponent(userId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  disableUser: (userId: string) =>
+    request<UserAdmin>(`/users/${encodeURIComponent(userId)}/disable`, { method: 'POST' }),
+  enableUser: (userId: string) =>
+    request<UserAdmin>(`/users/${encodeURIComponent(userId)}/enable`, { method: 'POST' }),
+
+  // Scope domain (legal entities, departments, boundaries, reporting periods)
+  getLegalEntities: () => request<LegalEntity[]>('/legal-entities'),
+  getDepartments: () => request<Department[]>('/departments'),
+  getBoundaries: () => request<Boundary[]>('/boundaries'),
+  createReportingPeriod: (data: { name: string; startDate: string; endDate: string }) =>
+    request<ReportingPeriod>('/reporting-periods', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
+  // Activity data update/submit (greenfield Java verbs)
+  updateActivityData: (activityId: string, data: Record<string, unknown>) =>
+    request<ActivityDataItem>(`/activity-data/${encodeURIComponent(activityId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  submitActivityData: (activityId: string) =>
+    request<ActivityDataItem>(`/activity-data/${encodeURIComponent(activityId)}/submit`, {
+      method: 'POST',
+    }),
+  createAudit: (reportingPeriodId: string) =>
+    request<AuditDetail>('/audits', {
+      method: 'POST',
+      body: JSON.stringify({ reportingPeriodId }),
+    }),
+
+  // Evidence detail/versions/link/delete
+  getEvidenceDetail: (evidenceId: string) =>
+    request<EvidenceRecord>(`/evidence/${encodeURIComponent(evidenceId)}`),
+  linkEvidence: (evidenceId: string, entityType: string, entityId: string) =>
+    request<EvidenceRecord>(`/evidence/${encodeURIComponent(evidenceId)}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ entityType, entityId }),
+    }),
+  deleteEvidence: (evidenceId: string) =>
+    request<{ deleted: boolean }>(`/evidence/${encodeURIComponent(evidenceId)}`, { method: 'DELETE' }),
+
   // Analytics & Reports
-  getDashboardAnalytics: () => request<any>('/analytics/dashboard'),
+  getDashboardAnalytics: () => request<DashboardSummary>('/analytics/dashboard'),
   getTrendInsights: (refresh?: boolean) =>
     request<TrendInsightsResponse>('/analytics/trend-insights', {
       method: 'POST',
       body: JSON.stringify({ refresh }),
     }),
-  getTestSuiteResults: () => request<any>('/test-suite/run'),
-  exportEmissionReportCsv: async () => {
+  getPeriodSummary: (periodId: string) =>
+    request<PeriodSummary>(`/analytics/periods/${encodeURIComponent(periodId)}/summary`),
+  getBreakdown: (dimension: string, periodId?: string) => {
+    const query = new URLSearchParams();
+    query.set('dimension', dimension);
+    if (periodId) query.set('periodId', periodId);
+    return request<Breakdown>(`/analytics/breakdown?${query.toString()}`);
+  },
+  getTestSuiteResults: () => request<TestSuiteResult>('/test-suite/run'),
+  exportEmissionReportCsv: async (filters?: {
+    periodId?: string;
+    facilityId?: string;
+    scope?: string;
+    scope2Type?: string;
+  }) => {
     const accessTokenAtStart = currentAccessToken;
     const sendExportRequest = () => {
       const headers: Record<string, string> = {};
       if (currentAccessToken) {
         headers['Authorization'] = `Bearer ${currentAccessToken}`;
       }
-      return fetch('/api/v1/reports/export-csv', { headers });
+      const query = new URLSearchParams();
+      if (filters?.periodId) query.set('periodId', filters.periodId);
+      if (filters?.facilityId) query.set('facilityId', filters.facilityId);
+      if (filters?.scope) query.set('scope', filters.scope);
+      if (filters?.scope2Type) query.set('scope2Type', filters.scope2Type);
+      const qs = query.toString() ? `?${query.toString()}` : '';
+      return fetch(`${API_BASE_URL}/api/v1/reports/export-csv${qs}`, { headers });
     };
 
     let response = await sendExportRequest();

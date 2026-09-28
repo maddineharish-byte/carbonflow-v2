@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "test": "npm run test:security && npm run test:frontend",
     "test:security": "node --import tsx --test server/auth-switch.test.ts server/auth-session.test.ts server/refresh-token.test.ts server/config.test.ts server/http-security.test.ts server/storage.test.ts",
-    "test:frontend": "node --import tsx --test src/auth-boundary.test.tsx src/api-refresh.test.ts",
+    "test:frontend": "node --import tsx --test src/auth-boundary.test.tsx src/api-refresh.test.ts src/auth-flow.test.ts src/integration.test.tsx",
     "test:persistence": "node --import tsx --test server/identity-persistence.test.ts server/refresh-restart-concurrency.test.ts server/activity-evidence-persistence.test.ts server/calculation-emission-persistence.test.ts"
   },
   "dependencies": {

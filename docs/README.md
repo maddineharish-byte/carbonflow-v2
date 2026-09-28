@@ -27,6 +27,7 @@ Enterprise Greenhouse Gas (GHG) Accounting, Audit Preparation, Evidence Manageme
 - [UI/UX Information Architecture](./UI_UX.md)
 - [Implementation Tasks Roadmap](./TASKS.md)
 - [Quality Assurance & Test Plan](./TEST_PLAN.md)
+- [Frontend Integration Guide](./FRONTEND.md)
 - [Architectural Decision Records](./DECISIONS.md)
 - [Execution & Operational Runbook](./EXECUTION.md)
 

@@ -1,9 +1,10 @@
 /**
  * CarbonFlow — Private Evidence Management Vault
- * Multi-tenant encrypted storage abstraction with SHA-256 checksum tracking.
+ * Multi-tenant storage with SHA-256 checksum tracking (Phase 8: the checksum
+ * is a deterministic integrity digest, not encryption).
  */
 import React, { useState, useRef } from 'react';
-import { FolderLock, UploadCloud, FileText, Download, ShieldCheck, HardDrive } from 'lucide-react';
+import { FolderLock, UploadCloud, FileText, Download, ShieldCheck, HardDrive, AlertTriangle } from 'lucide-react';
 import { EvidenceRecord } from '../types.ts';
 
 interface EvidenceViewProps {
@@ -15,23 +16,26 @@ interface EvidenceViewProps {
 
 export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActivityId, onUpload, onDownload }) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
     if (file.size > 25 * 1024 * 1024) {
-      alert('File size exceeds the 25 MB limit.');
+      setUploadError('File size exceeds the 25 MB limit.');
       return;
     }
 
     try {
       setIsUploading(true);
+      setUploadError(null);
       await onUpload(file);
     } catch (err: any) {
-      alert(err.message || 'Evidence upload failed.');
+      setUploadError(err.message || 'Evidence upload failed.');
     } finally {
       setIsUploading(false);
     }
@@ -40,9 +44,10 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
   const handleDownload = async (evidenceId: string, fileName: string) => {
     try {
       setDownloadingId(evidenceId);
+      setDownloadError(null);
       await onDownload(evidenceId, fileName);
     } catch (err: any) {
-      alert(err.message || 'Evidence download failed.');
+      setDownloadError(err.message || 'Evidence download failed.');
     } finally {
       setDownloadingId(null);
     }
@@ -54,9 +59,22 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
       <div>
         <h1 className="text-xl font-bold text-white tracking-tight">Evidence Management Vault</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Cryptographically hashed primary utility bills, meter invoices, and contractual PPA guarantee documents.
+          Hashed primary utility bills, meter invoices, and contractual PPA guarantee documents.
         </p>
       </div>
+
+      {uploadError && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          {uploadError}
+        </div>
+      )}
+      {downloadError && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          {downloadError}
+        </div>
+      )}
 
       {/* Upload Dropzone */}
       <div
@@ -134,35 +152,47 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {evidence.map((file) => (
-                <tr key={file.id} className="hover:bg-slate-800/50 transition">
-                  <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span>{file.fileName}</span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">
-                    {(file.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{file.mimeType}</td>
-                  <td className="px-4 py-3 font-mono text-[10px] text-emerald-400/90 break-all max-w-[200px]">
-                    {file.sha256Hash}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 text-[11px]">
-                    {new Date(file.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleDownload(file.id, file.fileName)}
-                      disabled={downloadingId === file.id}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium transition disabled:opacity-50"
-                    >
-                      <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      {downloadingId === file.id ? 'Loading…' : 'Get'}
-                    </button>
+              {evidence.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center">
+                    <FolderLock className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                    <div className="text-sm font-semibold text-slate-300">No evidence uploaded yet</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Upload primary source documents to attach them to activities or audits.
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                evidence.map((file) => (
+                  <tr key={file.id} className="hover:bg-slate-800/50 transition">
+                    <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-sky-400 shrink-0" />
+                      <span>{file.fileName}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">
+                      {(file.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{file.mimeType}</td>
+                    <td className="px-4 py-3 font-mono text-[10px] text-emerald-400/90 break-all max-w-[200px]">
+                      {file.sha256Hash}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-[11px]">
+                      {new Date(file.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(file.id, file.fileName)}
+                        disabled={downloadingId === file.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium transition disabled:opacity-50"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        {downloadingId === file.id ? 'Loading…' : 'Get'}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

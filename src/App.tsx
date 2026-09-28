@@ -13,6 +13,10 @@ import { AuditView } from './components/AuditView.tsx';
 import { EvidenceView } from './components/EvidenceView.tsx';
 import { TargetsView } from './components/TargetsView.tsx';
 import { TestSuiteView } from './components/TestSuiteView.tsx';
+import { InventoryView } from './components/InventoryView.tsx';
+import { AnalyticsView } from './components/AnalyticsView.tsx';
+import { AdminView } from './components/AdminView.tsx';
+import { PlatformAdminView } from './components/PlatformAdminView.tsx';
 import { AuthBoundary } from './components/AuthBoundary.tsx';
 
 import {
@@ -34,8 +38,10 @@ import {
   ActivityDataItem,
   AuditDetail,
   EvidenceRecord,
-  TargetItem,
-  ReductionProjectItem,
+  CarbonTarget,
+  CarbonTargetInput,
+  ReductionProject,
+  ReductionProjectInput,
   DashboardSummary,
   AuditStatus,
   AuthMembership,
@@ -51,6 +57,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentRole, setCurrentRole] = useState<RoleName | null>(null);
   const [memberships, setMemberships] = useState<AuthMembership[]>([]);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -64,8 +71,8 @@ export default function App() {
   const [currentAudit, setCurrentAudit] = useState<AuditDetail | null>(null);
   const [evidenceRecords, setEvidenceRecords] = useState<EvidenceRecord[]>([]);
   const [evidenceActivityId, setEvidenceActivityId] = useState<string | null>(null);
-  const [targets, setTargets] = useState<TargetItem[]>([]);
-  const [reductionProjects, setReductionProjects] = useState<ReductionProjectItem[]>([]);
+  const [targets, setTargets] = useState<CarbonTarget[]>([]);
+  const [reductionProjects, setReductionProjects] = useState<ReductionProject[]>([]);
   const [testSuiteData, setTestSuiteData] = useState<any>(null);
   const sessionGeneration = useRef(0);
 
@@ -84,6 +91,7 @@ export default function App() {
     setCurrentUser(null);
     setCurrentRole(null);
     setMemberships([]);
+    setPermissions([]);
     setFacilities([]);
     setReportingPeriods([]);
     setActivities([]);
@@ -116,6 +124,7 @@ export default function App() {
     setCurrentOrg(session.organization);
     setCurrentRole(session.role);
     setMemberships(getMembershipOptions(session));
+    setPermissions(Array.isArray(session.permissions) ? session.permissions : []);
     setAuthError(null);
   }, []);
 
@@ -355,6 +364,16 @@ export default function App() {
     }
   };
 
+  const handleCreatePeriod = async (data: { name: string; startDate: string; endDate: string }) => {
+    try {
+      await api.createReportingPeriod(data);
+      await loadTenantData();
+      showToast('Reporting period created.');
+    } catch (err: any) {
+      showToast(err.message || 'Reporting period creation failed', 'error');
+    }
+  };
+
   const handleAddActivity = async (data: any) => {
     try {
       await api.createActivityData(data);
@@ -385,14 +404,22 @@ export default function App() {
     }
   };
 
-  const handleCreateSnapshot = async () => {
+  const handleCreateSnapshot = async (periodId: string) => {
     try {
-      const periodId = reportingPeriods[0]?.id;
-      if (!periodId) return;
       await api.createInventorySnapshot(periodId);
       showToast('Immutable inventory snapshot generated.');
     } catch (err: any) {
       showToast(err.message || 'Snapshot creation failed', 'error');
+    }
+  };
+
+  const handleCreateAudit = async (reportingPeriodId: string) => {
+    try {
+      await api.createAudit(reportingPeriodId);
+      await loadTenantData();
+      showToast('Audit initiated.');
+    } catch (err: any) {
+      showToast(err.message || 'Audit creation failed', 'error');
     }
   };
 
@@ -477,6 +504,55 @@ export default function App() {
     await api.downloadEvidence(evidenceId, fileName);
   };
 
+  const handleCreateTarget = async (data: CarbonTargetInput) => {
+    try {
+      await api.createTarget(data);
+      await loadTenantData();
+      showToast('Carbon target created.');
+    } catch (err: any) {
+      showToast(err.message || 'Target creation failed', 'error');
+    }
+  };
+
+  const handleUpdateTarget = async (targetId: string, data: Partial<CarbonTargetInput>) => {
+    try {
+      await api.updateTarget(targetId, data);
+      await loadTenantData();
+      showToast('Carbon target updated.');
+    } catch (err: any) {
+      showToast(err.message || 'Target update failed', 'error');
+    }
+  };
+
+  const handleCreateProject = async (data: ReductionProjectInput) => {
+    try {
+      await api.createReductionProject(data);
+      await loadTenantData();
+      showToast('Reduction project created.');
+    } catch (err: any) {
+      showToast(err.message || 'Project creation failed', 'error');
+    }
+  };
+
+  const handleUpdateProject = async (projectId: string, data: Partial<ReductionProjectInput>) => {
+    try {
+      await api.updateReductionProject(projectId, data);
+      await loadTenantData();
+      showToast('Reduction project updated.');
+    } catch (err: any) {
+      showToast(err.message || 'Project update failed', 'error');
+    }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      await api.exportEmissionReportCsv();
+      showToast('Emission inventory report exported successfully.');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to export emission report.', 'error');
+    }
+  };
+
   const handleRunTestSuite = async () => {
     try {
       setIsLoading(true);
@@ -507,6 +583,7 @@ export default function App() {
         onSwitchTenant={handleSwitchTenant}
         onSwitchRole={handleSwitchRole}
         onRefresh={loadTenantData}
+        onExport={handleExportCsv}
         onLogout={handleLogout}
         isLoading={isLoading}
       />
@@ -519,6 +596,7 @@ export default function App() {
           onSelectView={setCurrentView}
           auditBadge={currentAudit?.status}
           testPassedCount={testSuiteData?.passed}
+          permissions={permissions}
         />
 
         {/* Content Area */}
@@ -526,6 +604,7 @@ export default function App() {
           {currentView === 'DASHBOARD' && (
             <DashboardView
               data={dashboardData}
+              periods={reportingPeriods}
               onNavigate={setCurrentView}
               onSnapshot={handleCreateSnapshot}
             />
@@ -537,6 +616,7 @@ export default function App() {
               facilities={facilities}
               onUpdateOrg={handleUpdateOrg}
               onCreateFacility={handleCreateFacility}
+              onCreatePeriod={handleCreatePeriod}
             />
           )}
 
@@ -556,7 +636,7 @@ export default function App() {
           )}
 
           {currentView === 'EMISSIONS' && (
-            <EmissionsView activities={activities} onRefresh={loadTenantData} />
+            <EmissionsView permissions={permissions} periods={reportingPeriods} />
           )}
 
           {currentView === 'FACTORS' && (
@@ -567,6 +647,9 @@ export default function App() {
             <AuditView
               audit={currentAudit}
               currentRole={currentRole}
+              permissions={permissions}
+              periods={reportingPeriods}
+              onCreateAudit={handleCreateAudit}
               onTransition={handleTransitionAudit}
               onVerifyChecklist={handleVerifyChecklist}
               onCreateFinding={handleCreateFinding}
@@ -585,7 +668,17 @@ export default function App() {
           )}
 
           {currentView === 'TARGETS' && (
-            <TargetsView targets={targets} projects={reductionProjects} />
+            <TargetsView
+              targets={targets}
+              projects={reductionProjects}
+              periods={reportingPeriods}
+              facilities={facilities}
+              permissions={permissions}
+              onCreateTarget={handleCreateTarget}
+              onUpdateTarget={handleUpdateTarget}
+              onCreateProject={handleCreateProject}
+              onUpdateProject={handleUpdateProject}
+            />
           )}
 
           {currentView === 'TEST_SUITE' && (
@@ -595,6 +688,20 @@ export default function App() {
               isLoading={isLoading}
             />
           )}
+
+          {currentView === 'INVENTORY' && (
+            <InventoryView periods={reportingPeriods} permissions={permissions} />
+          )}
+
+          {currentView === 'ANALYTICS' && (
+            <AnalyticsView periods={reportingPeriods} />
+          )}
+
+          {currentView === 'ADMIN' && (
+            <AdminView permissions={permissions} />
+          )}
+
+          {currentView === 'PLATFORM_ADMIN' && <PlatformAdminView />}
         </main>
       </div>
 

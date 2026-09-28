@@ -35,22 +35,24 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { DashboardSummary } from '../types.ts';
+import { DashboardSummary, ReportingPeriod } from '../types.ts';
 import { api } from '../services/api.ts';
 import { TrendInsightsSection } from './TrendInsightsSection.tsx';
 
 interface DashboardViewProps {
   data: DashboardSummary | null;
+  periods: ReportingPeriod[];
   onNavigate: (view: any) => void;
-  onSnapshot: () => void;
+  onSnapshot: (periodId: string) => void;
 }
 
 const COLORS = ['#10b981', '#0ea5e9', '#f59e0b', '#8b5cf6', '#ec4899'];
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, onSnapshot }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onNavigate, onSnapshot }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [trendViewMode, setTrendViewMode] = useState<'ALL' | 'DUAL_SCOPE2' | 'SCOPE1' | 'TOTALS'>('ALL');
+  const [snapshotPeriodId, setSnapshotPeriodId] = useState('');
 
   if (!data) {
     return <div className="p-8 text-slate-400">Loading enterprise metrics...</div>;
@@ -58,24 +60,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
 
   const { emissions, auditStatus, auditHealth, categories, facilities } = data;
 
-  // Trend data for the last 12 reporting periods
-  const trendData = (data.periodTrends && data.periodTrends.length > 0)
-    ? data.periodTrends
-    : [
-        { periodId: 'p-2024-01', periodName: '2024-M01 (Jan 2024)', shortName: 'Jan 24', scope1Tonnes: 34.2, scope2LocationTonnes: 45.8, scope2MarketTonnes: 42.1, totalLocationBasedTonnes: 80.0, totalMarketBasedTonnes: 76.3 },
-        { periodId: 'p-2024-02', periodName: '2024-M02 (Feb 2024)', shortName: 'Feb 24', scope1Tonnes: 33.1, scope2LocationTonnes: 44.2, scope2MarketTonnes: 39.5, totalLocationBasedTonnes: 77.3, totalMarketBasedTonnes: 72.6 },
-        { periodId: 'p-2024-03', periodName: '2024-M03 (Mar 2024)', shortName: 'Mar 24', scope1Tonnes: 29.5, scope2LocationTonnes: 41.0, scope2MarketTonnes: 36.2, totalLocationBasedTonnes: 70.5, totalMarketBasedTonnes: 65.7 },
-        { periodId: 'p-2024-04', periodName: '2024-M04 (Apr 2024)', shortName: 'Apr 24', scope1Tonnes: 26.8, scope2LocationTonnes: 38.6, scope2MarketTonnes: 32.0, totalLocationBasedTonnes: 65.4, totalMarketBasedTonnes: 58.8 },
-        { periodId: 'p-2024-05', periodName: '2024-M05 (May 2024)', shortName: 'May 24', scope1Tonnes: 25.1, scope2LocationTonnes: 39.4, scope2MarketTonnes: 28.5, totalLocationBasedTonnes: 64.5, totalMarketBasedTonnes: 53.6 },
-        { periodId: 'p-2024-06', periodName: '2024-M06 (Jun 2024)', shortName: 'Jun 24', scope1Tonnes: 24.3, scope2LocationTonnes: 43.1, scope2MarketTonnes: 26.0, totalLocationBasedTonnes: 67.4, totalMarketBasedTonnes: 50.3 },
-        { periodId: 'p-2024-07', periodName: '2024-M07 (Jul 2024)', shortName: 'Jul 24', scope1Tonnes: 23.9, scope2LocationTonnes: 45.0, scope2MarketTonnes: 24.8, totalLocationBasedTonnes: 68.9, totalMarketBasedTonnes: 48.7 },
-        { periodId: 'p-2024-08', periodName: '2024-M08 (Aug 2024)', shortName: 'Aug 24', scope1Tonnes: 23.5, scope2LocationTonnes: 44.5, scope2MarketTonnes: 23.1, totalLocationBasedTonnes: 68.0, totalMarketBasedTonnes: 46.6 },
-        { periodId: 'p-2024-09', periodName: '2024-M09 (Sep 2024)', shortName: 'Sep 24', scope1Tonnes: 22.8, scope2LocationTonnes: 39.0, scope2MarketTonnes: 19.5, totalLocationBasedTonnes: 61.8, totalMarketBasedTonnes: 42.3 },
-        { periodId: 'p-2024-10', periodName: '2024-M10 (Oct 2024)', shortName: 'Oct 24', scope1Tonnes: 24.0, scope2LocationTonnes: 38.2, scope2MarketTonnes: 17.2, totalLocationBasedTonnes: 62.2, totalMarketBasedTonnes: 41.2 },
-        { periodId: 'p-2024-11', periodName: '2024-M11 (Nov 2024)', shortName: 'Nov 24', scope1Tonnes: 26.2, scope2LocationTonnes: 40.5, scope2MarketTonnes: 15.0, totalLocationBasedTonnes: 66.7, totalMarketBasedTonnes: 41.2 },
-        { periodId: 'p-2024-12', periodName: '2024-M12 (Dec 2024)', shortName: 'Dec 24', scope1Tonnes: 27.5, scope2LocationTonnes: 41.8, scope2MarketTonnes: 14.2, totalLocationBasedTonnes: 69.3, totalMarketBasedTonnes: 41.7 },
-      ];
+  // Real reporting periods only — the backend returns the tenant's actual
+  // periods (zero-filled, never synthetic). No data → empty state below.
+  const trendData = data.periodTrends ?? [];
 
+  const hasTrendData = trendData.length > 0;
   const totalPeriods = trendData.length;
   const firstPeriod = trendData[0];
   const latestPeriod = trendData[totalPeriods - 1];
@@ -124,7 +113,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-            GHG Protocol Corporate Standard dual-reporting compliant. Scope 2 Location and Market-based
+            GHG Protocol Corporate Standard dual-reporting presentation. Scope 2 Location and Market-based
             emissions are reported separately to ensure non-aggregation integrity.
           </p>
         </div>
@@ -139,9 +128,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
             <Download className={`w-4 h-4 text-emerald-400 ${isExporting ? 'animate-bounce' : ''}`} />
             <span>{isExporting ? 'Exporting CSV...' : 'Export CSV'}</span>
           </button>
+          <select
+            value={snapshotPeriodId || periods[0]?.id || ''}
+            onChange={(e) => setSnapshotPeriodId(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none"
+            aria-label="Reporting period for snapshot"
+          >
+            {periods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           <button
-            onClick={onSnapshot}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition"
+            onClick={() => {
+              const periodId = snapshotPeriodId || periods[0]?.id;
+              if (periodId) onSnapshot(periodId);
+            }}
+            disabled={periods.length === 0}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition disabled:opacity-50"
           >
             <Camera className="w-4 h-4" />
             Create Snapshot
@@ -280,7 +285,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
         </div>
       </div>
 
-      {/* 12 Reporting Periods Trend Visualizer — Line Chart */}
+      {/* Reporting Periods Trend Visualizer — real periods only, empty state when none */}
+      {hasTrendData ? (
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
@@ -348,17 +354,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
           </div>
         </div>
 
-        {/* 12-Period Stats Bar */}
+        {/* Period Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
           <div>
-            <div className="text-[11px] font-medium text-slate-400">12-Period Net Trend</div>
+            <div className="text-[11px] font-medium text-slate-400">{totalPeriods}-Period Net Trend</div>
             <div className="text-sm font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
               <ArrowDownRight className="w-3.5 h-3.5" />
               <span>{netReductionPct}% reduction</span>
             </div>
           </div>
           <div>
-            <div className="text-[11px] font-medium text-slate-400">12-Period Cumulative (Market)</div>
+            <div className="text-[11px] font-medium text-slate-400">{totalPeriods}-Period Cumulative (Market)</div>
             <div className="text-sm font-bold text-white mt-0.5">
               {cumulativeMarketTonnes.toLocaleString(undefined, { maximumFractionDigits: 1 })}{' '}
               <span className="text-[10px] text-slate-400 font-normal">tCO₂e</span>
@@ -512,6 +518,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
           </ResponsiveContainer>
         </div>
       </div>
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Activity className="w-8 h-8 text-slate-600 mb-3" />
+            <div className="text-sm font-semibold text-slate-300">No reporting periods with data yet</div>
+            <div className="text-xs text-slate-500 mt-1 max-w-sm">
+              Trends appear here once reporting periods exist and activity data has been calculated.
+            </div>
+            <button
+              onClick={() => onNavigate('ACTIVITY_DATA')}
+              className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
+            >
+              Log Activity Data
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* AI Trend Insights & Anomaly Detection Section */}
       <TrendInsightsSection onNavigateToTargets={() => onNavigate('TARGETS')} />
@@ -529,6 +552,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
           </div>
 
           <div className="h-64 w-full">
+            {facilities.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center">
+                <Building2 className="w-8 h-8 text-slate-600 mb-2" />
+                <div className="text-xs text-slate-500">No facility data yet — add facilities and log activity data.</div>
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={facilities} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -542,6 +571,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, onNavigate, 
                 <Bar dataKey="scope2Tonnes" name="Scope 2 Electricity" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
