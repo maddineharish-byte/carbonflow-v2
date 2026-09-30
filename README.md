@@ -57,9 +57,15 @@ Optional / operational:
   origin. `*` is refused at startup.
 - `CARBONFLOW_EVIDENCE_VAULT_DIR` — private evidence file storage
 - `CARBONFLOW_SEED_DEMO_DATA` — development fixture seeding, defaults `false`
+- `DB_SSLMODE` — PostgreSQL transport security. Defaults to `prefer`, which
+  **silently falls back to plaintext**; set `require` (encryption only) or
+  `verify-ca` / `verify-full` (certificate verification via the JVM trust
+  store) in production. An unrecognised value fails startup. See
+  `docs/DEPLOYMENT-SECURITY.md`.
 - `VITE_JAVA_API_BASE_URL` — frontend build-time API base URL
 
-See `docs/SECRETS.md` and `docs/DEPLOYMENT-SECURITY.md`.
+See `docs/SECRETS.md`, `docs/DEPLOYMENT-SECURITY.md` and
+`docs/BACKUP-RECOVERY.md`.
 
 ## Database migrations
 
