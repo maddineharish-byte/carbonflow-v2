@@ -96,17 +96,21 @@ certificate verification is made anywhere.
 
 ## Operational state
 
+> **⚠ Table dated 2026-09-30, frozen release `d42af8b`. Entries since
+> superseded are marked inline. Retained as the historical record of the
+> freeze — do not read a superseded entry as a current limitation.**
+
 | Capability | Status | Note |
 | --- | --- | --- |
-| Browser UAT | **NOT VERIFIED** | No desktop browser was available. Nothing has been exercised in a browser. |
-| External deployment | **NOT VERIFIED** | Never performed or attempted. |
-| Backup execution | **NOT TESTED** | Procedure documented; no backup run. |
-| Restore execution | **NOT TESTED** | No restore performed; **RTO unknown**. |
-| Backup automation | **NOT IMPLEMENTED** | No scheduled job in the repository. |
-| Monitoring / alerting | **NOT IMPLEMENTED** | No metrics, alerting, or probe manifest. |
-| Graceful shutdown | **NOT IMPLEMENTED** | In-flight requests are cut on restart. |
-| TLS handshake | **NOT VERIFIED** | See above. |
-| TLS certificates / PKI | **NOT VERIFIED** | None provisioned or exercised. |
+| Browser UAT | **NOT VERIFIED** | No desktop browser was available. Nothing has been exercised in a browser. — **SUPERSEDED 2026-09-30:** real browser UAT has since been performed in Chrome 154 (16 of 18 areas PASS). See `docs/OPERATIONAL-VALIDATION.md`. |
+| External deployment | **NOT VERIFIED** | Never performed or attempted. — **STILL TRUE.** |
+| Backup execution | **NOT TESTED** | Procedure documented; no backup run. — **SUPERSEDED 2026-09-30:** backups have since been taken and verified. |
+| Restore execution | **NOT TESTED** | ~~No restore performed; **RTO unknown**.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256 and tenant isolation intact. **The RTO is still `NOT DEFINED`**, now because no business owner has approved a target. |
+| Backup automation | **NOT IMPLEMENTED** | No scheduled job in the repository. — **STILL TRUE.** Backups remain manual and on demand. |
+| Monitoring / alerting | **NOT IMPLEMENTED** | No metrics, alerting, or probe manifest. — **STILL TRUE** (F-09). |
+| Graceful shutdown | **NOT IMPLEMENTED** | In-flight requests are cut on restart. — **STILL TRUE.** |
+| TLS handshake | **NOT VERIFIED** | See above. — **STILL TRUE.** |
+| TLS certificates / PKI | **NOT VERIFIED** | None provisioned or exercised. — **STILL TRUE.** |
 | Performance | **NOT VERIFIED** | No load or latency measurement. |
 | Container/deploy manifests | **NOT IMPLEMENTED** | Deployment is manual. |
 
@@ -141,6 +145,11 @@ silently fixed.
    the encrypted path itself is unobserved.
 3. **No restore has been performed.** The recovery procedure is written, not
    rehearsed. RTO is unknown.
+   — **UPDATE 2026-09-30:** the procedure has now been rehearsed against an
+   isolated scratch environment and verified, including evidence-vault recovery.
+   The RTO remains **`NOT DEFINED`** — pending business approval, not pending
+   testing. Recovery capability has been demonstrated; recovery requirements
+   have not been decided. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 4. **No monitoring.** Failures will be silent unless instrumentation is added.
 5. **Shutdown is not graceful.**
 6. **Evidence vault defaults to a relative path** — set

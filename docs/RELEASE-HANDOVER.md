@@ -227,8 +227,26 @@ against a modified migration.
 **Backup and recovery: `docs/BACKUP-RECOVERY.md`** — covers logical and physical
 backup, the evidence vault, consistency ordering, retention, encryption, access
 control, and a 12-step recovery procedure. Every procedure there is labelled
-`TESTED` / `DOCUMENTED BUT NOT TESTED` / `NOT IMPLEMENTED`. **No restore has
-been performed, so the RTO is unknown.**
+`TESTED` / `DOCUMENTED BUT NOT TESTED` / `NOT IMPLEMENTED`.
+
+> ### ⚠ Update — 2026-09-30: recovery has since been rehearsed
+>
+> **The statement below was accurate when this document was frozen and is now
+> superseded. It is retained as the historical record of the freeze.**
+>
+> ~~No restore has been performed, so the RTO is unknown.~~
+>
+> **A restore has since been performed against an isolated scratch
+> environment.** Database and evidence-vault backup, destruction and restore
+> were all executed and verified; the application was restarted against the
+> restored database; a restored evidence file matched its original SHA-256 at
+> four independent points. Evidence: `docs/OPERATIONAL-VALIDATION.md`.
+>
+> **The RTO is still NOT DEFINED** — but now for the decisive reason that
+> **no business owner has approved a target**, not because the procedure is
+> untested. Recovery capability has been demonstrated; recovery requirements
+> remain pending business approval. See
+> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ---
 
@@ -299,14 +317,19 @@ a release blocker; each is a product, architecture, or operations decision.
 
 ### NOT VERIFIED
 
+> **⚠ Table dated 2026-09-30, frozen release `d42af8b`. Entries that have since
+> been superseded are marked inline below. The table is retained as the
+> historical record of the freeze — do not read a superseded entry as a current
+> limitation.**
+
 | Capability | Why |
 | --- | --- |
 | **Browser UAT** | No desktop browser was available. Nothing in this release has been exercised in a browser. **Rendering, layout, focus, accessibility and interaction behaviour are entirely unverified.** |
 | **Live TLS handshake** | No TLS-enabled PostgreSQL was available. The TLS *configuration* is verified and fails closed correctly, but a successful encrypted handshake and certificate rejection have not been observed. |
 | **External production deployment** | No deployment was performed or attempted. This is local/runtime verification only. |
 | **TLS certificates / PKI** | No certificates were provisioned; `verify-ca`/`verify-full` have not been exercised against a real CA. |
-| **Backup execution** | No backup has been taken by a defined schedule; no automation exists. |
-| **Restore execution** | No restore has been performed. The RTO is unknown. |
+| **Backup execution** | No backup has been taken by a defined schedule; no automation exists. — **STILL TRUE** (2026-09-30: backups remain manual and on demand; no scheduler exists) |
+| **Restore execution** | ~~No restore has been performed. The RTO is unknown.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256. **The RTO is still `NOT DEFINED`**, now because no business owner has approved a target. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. |
 | **Performance** | No load, latency, or throughput measurement was taken. |
 | **Multi-instance / HA** | The login throttle and pool configuration were not exercised under multiple instances. |
 
@@ -343,6 +366,13 @@ Read these before assuming the system is production-ready in every respect.
 3. **No backup or restore has been executed.** `docs/BACKUP-RECOVERY.md` is a
    written procedure, not a rehearsed one. **Rehearse the restore before you
    trust it.** A backup that has never been restored is an assumption.
+   — **UPDATE 2026-09-30:** the procedure has now been rehearsed against an
+   isolated scratch environment and verified (including evidence-vault recovery).
+   **Still true and still important:** backups are **manual and on demand**,
+   there is **no scheduler**, **no retention enforcement**, and **no approved
+   RTO or RPO**. Rehearse again against *your own* environment before trusting
+   it in production, and note that `rsync` itself was never exercised (the
+   drill host is Windows; `robocopy` was used equivalently).
 
 4. **There is no monitoring.** You will not be told about lockouts, pool
    saturation, evidence-write failures, or error-rate regressions unless you

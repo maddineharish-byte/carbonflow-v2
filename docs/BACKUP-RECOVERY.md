@@ -2,9 +2,20 @@
 
 > **Phase 10.6.1 (finding F-08).** This document did not previously exist even
 > though `DEPLOYMENT-SECURITY.md` cited it. It is written against the actual
-> CarbonFlow architecture. **Every procedure below is DOCUMENTED BUT NOT TESTED**
-> except where explicitly marked otherwise. No backup automation exists in this
-> repository, and no restore has been performed against production data.
+> CarbonFlow architecture. No backup automation exists in this repository, and
+> no restore has been performed against production data.
+
+> ### ⚠ Status update — 2026-09-30
+>
+> The procedures in §2.1, §2.2 and §2.4 and the recovery sequence in §4 have now
+> been **rehearsed** against an isolated scratch environment and are marked
+> **TESTED** where noted below. **No production restore has been performed.**
+>
+> **CarbonFlow has no approved RTO and no approved RPO.** Both remain **pending
+> business approval**. Nothing in this document constitutes a service-level
+> commitment. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+>
+> Rehearsal evidence: `docs/OPERATIONAL-VALIDATION.md`.
 
 ## What "tested" means here
 
@@ -79,8 +90,10 @@ the vault is older and the bytes are gone.
 
 ## 2. Backup procedures
 
-> All procedures in this section are **DOCUMENTED BUT NOT TESTED**. No script in
-> this repository performs them.
+> **Rehearsal status:** §2.1, §2.2 and §2.4 have been **TESTED** against an
+> isolated scratch environment (2026-09-30). §2.3 (`pg_basebackup`) remains
+> **DOCUMENTED BUT NOT TESTED**. No script in this repository performs any of
+> these procedures; each was executed by hand, by an operator.
 
 ### 2.1 Logical backup — `pg_dump` (recommended)
 
@@ -205,8 +218,14 @@ key if backup operations are performed by more than one person.
 
 ## 4. Recovery procedure
 
-> **DOCUMENTED BUT NOT TESTED.** No restore has been performed against
-> production data. Rehearse into a scratch database before relying on this.
+> **TESTED against an isolated scratch environment (2026-09-30).** The full §4
+> sequence — database restore, vault restore, application restart, health,
+> login, tenant isolation and evidence download — was executed end to end and
+> verified. **No restore has been performed against production data.** Rehearse
+> into a scratch environment before relying on this in production.
+>
+> **The elapsed times observed in rehearsal are NOT an RTO.** CarbonFlow has no
+> approved RTO; see `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ### Step 1 — Prepare PostgreSQL
 
@@ -413,11 +432,41 @@ production, and at a defined interval thereafter:
 2. Restore the most recent backup following §3–§5.
 3. Run the full §3 verification: health, login, tenant isolation, emissions,
    audit, evidence download, CSV export.
-4. Record the elapsed time — that is the actual RTO — and the outcome.
+4. Record the elapsed time **and the outcome**. The elapsed time is an
+   *observed recovery time* — it is **not** an RTO. See the warning below.
 5. Destroy the scratch environment.
 
-**No rehearsal has been performed for this document.** Until one is, the RTO of
-CarbonFlow is unknown.
+> ### ⚠ The elapsed time is NOT the RTO
+>
+> Step 4 produces an **observed recovery time**. It becomes an RTO only if a
+> named business owner has approved a target and the measurement is compared
+> against it. **CarbonFlow currently has no approved RTO**, so a recorded
+> elapsed time establishes nothing about compliance.
+>
+> See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+
+### Rehearsal status
+
+**A rehearsal HAS been performed** (2026-09-30), against an isolated scratch
+environment. Database backup, database destruction, database restore, evidence
+vault backup, vault destruction, vault restore, application restart, login,
+tenant isolation and evidence download were all executed and verified; a
+restored evidence file matched its original SHA-256 at four independent points.
+Full evidence: `docs/OPERATIONAL-VALIDATION.md`.
+
+What that rehearsal established, and what it did **not**:
+
+- **Established:** the procedures in this document work, including the §2.5
+  ordering rule and the §4 Step 5 vault restore.
+- **Did NOT establish an RTO or RPO.** `Formal RTO: NOT DEFINED`.
+  `Formal RPO: NOT DEFINED`. Both remain **pending business approval** — see
+  `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+- **Did NOT rehearse:** scheduled backup, retention, encryption at rest, offsite
+  replication, backup monitoring, or `rsync` itself (this host is Windows; the
+  drill used the platform-equivalent `robocopy`).
+
+**Rehearsal frequency is itself `NOT DEFINED` and is pending business
+approval.** No interval is prescribed.
 
 ---
 

@@ -145,6 +145,15 @@ configuration, not hardcoded values. Facilities may span multiple countries.
 | `docs/CALCULATIONS.md` | Calculation specification |
 | `docs/RBAC.md` | Role and permission matrix |
 | `docs/AUDIT_WORKFLOW.md` | Audit state machine |
+| `docs/BACKUP-RECOVERY.md` | Backup and recovery procedures |
+| `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md` | **Pending business approval.** RTO/RPO/retention/ownership decisions that are **not yet defined** |
+| `docs/OPERATIONAL-VALIDATION.md` | Operational validation and recovery-drill evidence |
+
+> **Recovery objectives:** CarbonFlow has **no approved RTO and no approved
+> RPO**. Recovery *capability* has been demonstrated by drill; recovery
+> *requirements* remain pending business approval. See
+> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. Do not quote any measured
+> recovery figure as a service commitment.
 
 ### Phase 10 evidence (historical — read as a record, not as current state)
 

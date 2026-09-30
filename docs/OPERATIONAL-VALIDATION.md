@@ -930,12 +930,39 @@ application write and the backup was observed.
 >
 > Full decision document: **`docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`**.
 
+> ### ⚠ The three concepts, kept separate
+>
+> | Concept | Meaning | State |
+> | --- | --- | --- |
+> | **Observed capability** | What a drill actually demonstrated | Measured below |
+> | **Approved requirement** | What the business formally requires | **NOT DEFINED** |
+> | **Compliance result** | Whether measurement satisfies the requirement | **CANNOT BE DETERMINED** |
+>
+> The observed figures in this section are **drill measurements, not approved
+> service objectives.** Specifically, these are **false** and must never be
+> written:
+>
+> ```text
+> ✗ RTO = 66.4 s     ✗ RPO = 245.8 s     ✗ RTO MET / MISSED
+> ✗ RTO = 177.9 s    ✗ RPO COMPLIANT     ✗ RPO MET / MISSED
+> ```
+>
+> **Until business approval exists, CarbonFlow has no formal RTO/RPO
+> commitment.** Recovery capability has been demonstrated; recovery requirements
+> remain pending business approval.
+
 ### Approved targets
 
 ```text
-APPROVED RTO:  NOT DEFINED
-APPROVED RPO:  NOT DEFINED
+APPROVED RTO:  NOT DEFINED   (PENDING BUSINESS APPROVAL)
+APPROVED RPO:  NOT DEFINED   (PENDING BUSINESS APPROVAL)
 ```
+
+> **Terminology note.** Earlier sections of this document record
+> `FORMAL RTO: UNKNOWN`. `UNKNOWN` and `NOT DEFINED` mean the same thing here —
+> no approved target exists — but **`NOT DEFINED` is the canonical term**, and
+> `NOT DEFINED` is used for all new statements. The `UNKNOWN` wording above is
+> retained where it forms part of a dated historical record.
 
 **Neither value was invented.** A search of every Markdown file in the
 repository for `RTO`, `RPO`, `recovery time`, `recovery point`, `backup
@@ -1303,13 +1330,29 @@ correctly revokes the session.
 - **Still untested:** scheduled/automated backup, retention enforcement,
   encryption at rest, offsite replication, backup monitoring, and the literal
   `rsync` command (this host has no `rsync`; `robocopy` was used equivalently).
-- **Formal RTO and RPO remain undefined**, and browser coverage is Chrome-only
-  with no WCAG audit.
+- **Formal RTO and RPO remain `NOT DEFINED`** — pending business approval, and
+  this is now the **decisive remaining gap**, not untested recovery capability.
+  Browser coverage is also Chrome-only with no WCAG audit.
 
 None of these blocks release. None is a security, accounting or data-integrity
 defect. B-01 is the one a customer would notice first. The recovery procedures
 in `docs/BACKUP-RECOVERY.md` have now been demonstrated rather than assumed —
 which is a materially stronger position than the release was in an hour ago.
+
+> **This verdict is deliberately NOT upgraded to `PASS` on the strength of the
+> recovery drills.** Recovery capability being demonstrated does not mean
+> recovery requirements are met — there are no approved requirements to meet.
+> The verdict remains:
+>
+> ```text
+> OPERATIONAL VALIDATION — PARTIAL
+> ```
+>
+> Reason: *recovery procedure demonstrated successfully, but formal recovery
+> requirements are not yet approved.*
+>
+> Likewise this release is **not** `PRODUCTION READY`, **not** `RTO COMPLIANT`,
+> **not** `RPO COMPLIANT`, and **not** `FULL OPERATIONAL VALIDATION`.
 
 **The release state is not changed by this exercise.** CarbonFlow remains:
 
