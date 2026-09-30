@@ -319,7 +319,12 @@ available or authorized. This document is not evidence of a live deployment.
 
 ## 15. Findings
 
-### Finding 1 — Database TLS is not implementable as documented — **HIGH**
+### Finding 1 — Database TLS is not implementable as documented — **HIGH â€” RESOLVED in Phase 10.6.1**
+
+> **Status: RESOLVED (Phase 10.6.1).** `DB_SSLMODE` is now a real, bound,
+> validated setting passed to PgJDBC as a connection property; an invalid value
+> fails application startup, and `require` was verified live to refuse a
+> cleartext fallback. See `docs/PHASE10.6.1-BLOCKER-RESOLUTION.md`.
 
 - **Evidence:** `docs/DEPLOYMENT-SECURITY.md:27,34,46` instruct operators to set
   `carbonflow.datasource.url`. The real property is `spring.datasource.url`
@@ -431,7 +436,10 @@ available or authorized. This document is not evidence of a live deployment.
   project's own docs.
 - **Required action:** add the two properties. No migration.
 
-### Finding 8 — `docs/BACKUP-RECOVERY.md` referenced but missing — **MEDIUM**
+### Finding 8 — `docs/BACKUP-RECOVERY.md` referenced but missing — **MEDIUM â€” RESOLVED in Phase 10.6.1**
+
+> **Status: RESOLVED (Phase 10.6.1).** `docs/BACKUP-RECOVERY.md` now exists and
+> labels every procedure TESTED / DOCUMENTED BUT NOT TESTED / NOT IMPLEMENTED.
 
 - **Evidence:** `docs/DEPLOYMENT-SECURITY.md:148` cites
   `docs/BACKUP-RECOVERY.md - backup/recovery procedure`. The file does not exist
