@@ -20,32 +20,74 @@ The `spring.datasource.url` PostgreSQL connection parameter controls TLS behavio
 | `verify-ca` | TLS mandatory + server certificate verified against trusted CA. |
 | `verify-full` | TLS mandatory + server certificate hostname verified. |
 
+> **CORRECTED in Phase 10.6 (finding F-01).** An earlier version of this
+> document told operators to set `carbonflow.datasource.url`, `DB_SSLMODE` and
+> `CARBONFLOW_DB_SSL_TRUST_STORE`. **None of those three is real.**
+> `carbonflow.datasource.url` is not a property the application reads (the
+> correct name is `spring.datasource.url`), and `DB_SSLMODE` /
+> `CARBONFLOW_DB_SSL_TRUST_STORE` exist nowhere in the codebase. Following the
+> old text silently produced an unencrypted connection while appearing secured.
+> The section below is the verified reality.
+
+### Current state: TLS is NOT enabled by the application
+
+`application.properties` builds the JDBC URL as:
+
+```properties
+spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}?stringtype=unspecified
+```
+
+There is **no `sslmode` parameter and no environment variable that adds one**.
+The connection therefore uses the PostgreSQL JDBC driver's default (`prefer`):
+TLS if the server offers it, **silent cleartext fallback if it does not.**
+
 ### Recommended Production Configuration
 
-```properties
-# Production: TLS required, server certificate verified
-carbonflow.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=verify-ca
+Because the application does not add `sslmode`, set the whole URL explicitly
+using Spring's standard relaxed-binding environment variable:
+
+```bash
+# Production: TLS mandatory, server certificate verified against a trusted CA.
+# verify-ca requires the JVM trust store to contain the issuing CA.
+export SPRING_DATASOURCE_URL='jdbc:postgresql://db.internal:5432/carbonflow?sslmode=verify-ca&stringtype=unspecified'
 ```
 
-### Development Configuration (no TLS required)
+`SPRING_DATASOURCE_URL` overrides `spring.datasource.url` in `application.properties`.
+Keep `stringtype=unspecified`; the repositories rely on it.
 
-```properties
-# Development: cleartext is acceptable (local trusted environment only)
-carbonflow.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
-```
+| `sslmode` | Behavior |
+|---|---|
+| `disable` | Cleartext connection, no encryption. Local development only. |
+| `allow` | Start cleartext, upgrade to TLS if the server supports it. |
+| `prefer` | **Current effective default.** Try TLS, fall back to cleartext. |
+| `require` | TLS mandatory; the connection fails if the server does not speak TLS. |
+| `verify-ca` | TLS mandatory; server certificate verified against a trusted CA. **Recommended for production.** |
+| `verify-full` | TLS mandatory; certificate verified *and* hostname checked. |
+
+If your managed PostgreSQL provider (Cloud SQL, RDS, Supabase, Azure) forces TLS
+server-side, no client change is needed — but do not assume it; verify.
 
 ### TLS Certificate Expectations
-- **Production:** The PostgreSQL server must present a valid certificate either signed by a trusted Certificate Authority (`verify-ca` or `verify-full`) or with a hostname matching the connection URL (`verify-full`).
-- **Self-signed certificates** are acceptable in production when `CARBONFLOW_DB_SSL_TRUST_STORE` points to a trust store containing the server cert, but this adds operational complexity — prefer a proper CA deployment.
-- **Development:** No certificate validation required when `sslmode=disable`.
+- **Production:** use `verify-ca` (or `verify-full` when the URL host matches the
+  certificate). The issuing CA must be in the JVM trust store
+  (`javax.net.ssl.trustStore` / `-Djavax.net.ssl.trustStore`).
+- **Self-signed certificates:** mount the server certificate as a JVM trust store
+  and run with `-Djavax.net.ssl.trustStore=<path>`. Prefer a real CA.
+- **Not implemented:** the application has no trust-store environment variable.
+  A JVM `trustStore` is the only supported route. There is also no startup check
+  that fails when verification is required but unavailable — if the connection
+  succeeds, TLS is in effect; if you expected TLS and it is not, the URL is
+  almost certainly missing `sslmode`.
+- **Development:** `sslmode=disable` is acceptable on a trusted local network.
 
 ### Configuration Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `carbonflow.datasource.url` | constructed from `DB_*` env vars + `?sslmode=disable` | Full JDBC URL; the `sslmode` parameter controls TLS behavior |
-| `DB_SSLMODE` | `disable` | Overrides the `sslmode` in the JDBC URL via `?sslmode=${DB_SSLMODE}` |
-| `CARBONFLOW_DB_SSL_TRUST_STORE` | (empty) | Path to a JSSE trust store (JKS/PEM) for `verify-ca`/`verify-full` modes. If empty and `sslmode` requires verification, startup fails. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | none / `5432` / none / none / none | Build the default JDBC URL. Placeholders are unresolved by default, so startup fails fast when unset. |
+| `SPRING_DATASOURCE_URL` | (unset) | **Overrides the whole JDBC URL.** This is the only supported way to add `sslmode`. |
+| `DB_SSLMODE` | **does not exist** | Not implemented. Use `SPRING_DATASOURCE_URL`. |
+| `CARBONFLOW_DB_SSL_TRUST_STORE` | **does not exist** | Not implemented. Use the JVM `trustStore`. |
 | `CARBONFLOW_CORS_ALLOWED_ORIGINS` | (empty) | Comma-separated list of exact browser origins permitted to call the API with credentials. **No default** - see "CORS Allow-List" below. |
 | `CARBONFLOW_JWT_SECRET` | (required, no default) | JWT signing secret — **must be set via environment, never committed** |
 | `CARBONFLOW_REFRESH_TOKEN_SECRET` | (required, no default) | HMAC key for refresh-token hash storage — **must be set via environment, never committed** |
@@ -113,7 +155,7 @@ The application **fails to start** if required secrets are missing. This is enfo
 | `carbonflow.auth.throttle.window-ms` | Failure observation window (default 15 min) | Environment |
 | `carbonflow.auth.throttle.lockout-ms` | Lockout duration (default 15 min) | Environment |
 | `carbonflow.datasource.url` | Full JDBC URL (constructed from DB_*) | Constructed |
-| `DB_SSLMODE` | PostgreSQL SSL mode override | Environment |
+| `DB_SSLMODE` | **Does not exist** — use `SPRING_DATASOURCE_URL` with `sslmode` (see the DB TLS section) | — |
 | `CARBONFLOW_CORS_ALLOWED_ORIGINS` | Exact frontend origins allowed to call the API cross-origin (no default) | Environment |
 | `carbonflow.cors.allowed-origins` | Same as `CARBONFLOW_CORS_ALLOWED_ORIGINS` | `application.properties` |
 
@@ -130,24 +172,30 @@ The application **fails to start** if required secrets are missing. This is enfo
 ## Audit
 
 ### What This Document Does NOT Claim
-- Disaster recovery capability — not tested.
+- Disaster recovery capability — **no backup or restore procedure exists in this repository** (see Phase 10.6 finding F-08). `docs/BACKUP-RECOVERY.md` is not present; do not look for it.
 - Cryptographic immutability of evidence at rest — evidence files are stored unencrypted on local disk (honestly documented; no encryption claim is made anywhere in the codebase).
-- Automatic TLS enforcement on local development — `sslmode=disable` is the development default.
+- Automatic TLS enforcement — the application does not set `sslmode`; the driver's `prefer` default applies until `SPRING_DATASOURCE_URL` overrides it.
 
 ### Remediation Path from Development to Production TLS
-1. Set `DB_SSLMODE=verify-ca` (or `verify-full`) in the production environment.
-2. Ensure the PostgreSQL server presents a valid certificate trusted by the configured CA.
+1. Set `SPRING_DATASOURCE_URL` to a URL containing `sslmode=verify-ca` (or `verify-full`), keeping `stringtype=unspecified`.
+2. Ensure the PostgreSQL server presents a valid certificate trusted by a CA in the JVM trust store.
 3. Set `CARBONFLOW_JWT_SECRET` and `CARBONFLOW_REFRESH_TOKEN_SECRET` to 32+ random bytes.
 4. Verify `mvn clean verify` passes with the new configuration.
 5. Run the live-stack smoke test (login → session → representative endpoints → calculation → audit → CSV export → logout) with TLS active.
-6. Document the configuration in `docs/DEPLOYMENT-RUNBOOK.md`.
+6. Confirm on the server side that the connection is encrypted, rather than assuming it from configuration.
 
 ## References
 
 - `docs/SECRETS.md` — variable names and setup expectations (never values).
-- `docs/BACKUP-RECOVERY.md` — backup/recovery procedure.
-- `docs/PHASE9-SECURITY-MATRIX.md` — comprehensive security test matrix.
-- `RolePermissions.java` — the 9-role × 44-permission matrix (code-for-code port from Node).
+- `docs/SECURITY.md` — security model and controls.
+- `docs/SECURITY-THREAT-MODEL.md` — threat model.
+- `docs/EXECUTION.md` — how to run and build the stack.
+- **Missing (do not look for these):** `docs/BACKUP-RECOVERY.md` and
+  `docs/PHASE9-SECURITY-MATRIX.md` are referenced by earlier revisions of this
+  document but **have never existed**. Backup/recovery is a known open gap
+  (Phase 10.6 finding F-08); the security test matrix is covered by the Maven
+  suite under `backend-java/src/test/`.
+- `RolePermissions.java` — the 9-role × 44-permission matrix (ported from the retired Node backend).
 - `JwtTokenProvider.java` — fail-closed JWT secret validation.
 - `AuthService.java` — fail-closed refresh-secret validation.
 - `LoginThrottle.java` — env-configurable failed-login throttle (Phase 9 addition).
