@@ -11,6 +11,7 @@
 | Validation start | 2026-09-30 11:53:37 +05:30 (backup/restore) |
 | Browser UAT window | 2026-09-30 12:27 – 14:20 +05:30 |
 | Evidence vault recovery drill | 2026-09-30 13:49 – 14:03 +05:30 |
+| RTO/RPO definition + recovery validation | 2026-09-30 14:18 – 14:33 +05:30 |
 | **Working tree at start** | **CLEAN** |
 | **Working tree at end** | **CLEAN** (plus untracked `drill-vault/`, a runtime evidence directory, not source) |
 | Commit history | Linear, unchanged by this exercise |
@@ -921,6 +922,208 @@ application write and the backup was observed.
 
 ---
 
+## RTO / RPO DEFINITION AND RECOVERY VALIDATION
+
+> Performed 2026-09-30 14:18–14:33 +05:30. This section answers a different
+> question from the drills above: not *"does the procedure work?"* but *"what
+> have we committed to, and does reality meet it?"*
+>
+> Full decision document: **`docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`**.
+
+### Approved targets
+
+```text
+APPROVED RTO:  NOT DEFINED
+APPROVED RPO:  NOT DEFINED
+```
+
+**Neither value was invented.** A search of every Markdown file in the
+repository for `RTO`, `RPO`, `recovery time`, `recovery point`, `backup
+frequency`, `business continuity`, `disaster recovery`, `downtime`,
+`data loss`, `retention`, `SLA`, `uptime` and `availability` found **no
+numeric target of any kind**. The only existing statements acknowledge their
+absence:
+
+| Source | Statement |
+| --- | --- |
+| `docs/BACKUP-RECOVERY.md` §6 | *"No rehearsal has been performed for this document. Until one is, the RTO of CarbonFlow is unknown."* |
+| `docs/BACKUP-RECOVERY.md` §3.1 | *"No retention policy is implemented in this repository — an operator must set one."* |
+| `docs/FINAL-RELEASE-REPORT.md` | *"No performance or HA data. Do not assume service levels."* |
+| `docs/RELEASE-HANDOVER.md` | *"No performance data exists. Do not assume service levels."* |
+
+**`Formal RTO: NOT DEFINED` · `Formal RPO: NOT DEFINED`** — replacing `UNKNOWN`
+with a guess would have been the wrong answer, so it was not done.
+
+No operational owner, approver, on-call rotation or escalation path is recorded
+anywhere in this repository either. Recovery objectives without a named
+accountable person are unenforceable, because nobody is required to notice when
+they are missed.
+
+### Observed figures
+
+Measured by destroying and recovering a **fully isolated** environment
+(`carbonflow_rto` database + a dedicated vault), both created for this drill.
+
+| Event | Timestamp |
+| --- | --- |
+| Data set A created (pre-backup) | 14:18:22.460 |
+| **Backup complete — the recovery point** | **14:25:25.980** |
+| Post-backup data written (must be lost) | 14:27:15 – 14:28:39 |
+| **FAILURE START** | **14:29:31.763** |
+| RESTORE START | 14:30:07.858 |
+| Application health `UP` (application's own log) | 14:30:38.178 |
+| Application verified usable | 14:32:29.689 |
+
+```text
+OBSERVED RECOVERY TIME  (failure -> health UP)        : 66.4 s
+OBSERVED RECOVERY TIME  (failure -> verified usable)  : 177.9 s
+OBSERVED RECOVERY POINT (failure -> last backup)      : 245.8 s  (4 min 6 s)
+```
+
+**Breakdown of the 66.4 s** — note where the time actually goes:
+
+| Phase | Duration |
+| --- | --- |
+| Detection-to-restore-start gap (me deciding to restore) | 36.1 s |
+| `createdb` | 1.42 s |
+| `pg_restore` (115,047-byte dump) | 2.04 s |
+| Evidence vault restore (1 file, 154 bytes) | 0.06 s |
+| **Application restart → health `UP`** | **22.9 s** |
+
+Data recovery was 3.5 s. **Application startup was 22.9 s** — over half the
+total. The headline number is dominated by JVM startup on a warm machine, not by
+recovering data.
+
+### Conditions under which those figures were obtained
+
+Required by §19 — these figures must never be quoted without them:
+
+| Condition | Value |
+| --- | --- |
+| Environment | Local developer workstation, Windows 11 Pro |
+| Network | Loopback only — no network transfer, no failover, no HA |
+| Dataset | **Synthetic**: 2 activities, 2 calculations, 2 emission records, 1 audit, 1 evidence file |
+| Database size | **115,047 bytes** |
+| Vault size | **1 file, 154 bytes** |
+| Backup type | `pg_dump` logical, **manual, on demand** |
+| Hardening | **None** — `DB_SSLMODE=prefer`, no encryption at rest, no monitoring |
+
+### What the observed figures do not mean
+
+- **They do not mean CarbonFlow meets an RTO.** No RTO exists to meet.
+- They do **not** mean recovery would take 66 s in production. Restoring 115 KB
+  is not a measurement of restoring a real dataset; a dataset 10,000× larger
+  would invert the relative weight of JVM startup, `pg_restore`, and any
+  offsite network transfer.
+- They say **nothing about detection**. The 36 s gap was me deciding to restore.
+  Real detection depends on monitoring that is `NOT IMPLEMENTED` (F-09), so an
+  undetected outage could run for hours.
+- They say **nothing about failover**. No standby, no replica, no HA. The drill
+  assumed the same host returns.
+- The **4-minute observed recovery point is an artifact of my own timing** — it
+  is simply the interval between the backup I chose to take and the failure I
+  then caused. It is **not** a capability statement. With no scheduler, the real
+  RPO is *whatever an operator happens to do*, which is unbounded.
+
+### RPO verification — the backup boundary is exact
+
+Data was deliberately written **after** the backup so that what the backup
+contains could be measured rather than assumed.
+
+| Record | Written | After restore |
+| --- | --- | --- |
+| Activity `NATURAL_GAS` (pre-backup) | before 14:25:25.980 | **survived** |
+| Calculation + emission + audit (pre-backup) | before 14:25:25.980 | **survived** |
+| Evidence file A (pre-backup) | before 14:25:25.980 | **survived**, SHA-256 identical |
+| Activity `REFRIGERANT_R410A` (post-backup) | 14:28:19 | **correctly lost** |
+| Calculation + emission for it (post-backup) | 14:28:19 | **correctly lost** |
+| Evidence file B (post-backup) | 14:28:39 | **correctly lost** |
+
+The boundary is exact: everything written before the backup survived, everything
+after it was lost. This is the expected behaviour of a manual, on-demand backup
+with no WAL archiving — and it is now **demonstrated** rather than assumed.
+
+### Evidence recovery (Part 16)
+
+| Check | Result |
+| --- | --- |
+| Database metadata restored | **yes** — survived `DROP DATABASE` + `pg_restore` |
+| Physical file restored | **yes** |
+| Database `sha256_hash` = original | **yes** |
+| Physical file SHA-256 = original | **yes** |
+| Bytes served by the application = original | **yes** (HTTP 200) |
+| All four hashes identical | **yes** |
+| Content | `CARBONFLOW RTO/RPO RECOVERY TEST - EVIDENCE FILE A` |
+
+### Database integrity (Part 17)
+
+| Check | Result |
+| --- | --- |
+| `flyway_schema_history` | **8 rows, all `success = t`, max version 8** |
+| Application Flyway behaviour | `Successfully validated 8 migrations` → `Current version of schema "public": 8` → **`Schema "public" is up to date. No migration necessary.`** |
+| Table count | **38** (as documented) |
+| Index count | **74** |
+| Calculation factor / tonnes / hash | `0.18288000` / `0.216536` / `45db537000060b04c95126f9ce94a6f1ca102f552c7fb8b89f2288a97dbb32b3` — **identical to pre-backup** |
+| Audit state | `DRAFT` — preserved |
+| Emission record | `SCOPE_1` / `0.216536` — preserved |
+| Tenant relationship | Acme Global Manufacturing — correct, 1 evidence record |
+| Migrations | **unchanged, V1–V8, no V9** |
+
+### Results against target
+
+```text
+RTO RESULT:  NOT TESTED — no approved RTO exists to compare against
+RPO RESULT:  NOT TESTED — no approved RPO exists to compare against
+EVIDENCE RECOVERY: PASS
+```
+
+`RECOVERY REQUIREMENT NOT MET` is **not** recorded, because that judgement
+requires a target. No requirement has been defined, so none can be unmet.
+
+### Requirements still to be decided
+
+Recorded in full in `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`:
+
+```text
+RTO:                           NOT DEFINED
+RPO:                           NOT DEFINED
+Backup frequency:              NOT DEFINED
+Retention (database):          NOT DEFINED
+Retention (evidence vault):    NOT DEFINED
+Evidence recovery requirement: NOT DEFINED (YES / NO / SEPARATE REQUIREMENT)
+
+Approving authority:           NOT IDENTIFIED
+Approval date:                 NOT APPROVED
+```
+
+### Capability that must exist before a tight target could be met
+
+Recorded so the cost is visible before a target is chosen:
+
+| Capability | State | Needed for |
+| --- | --- | --- |
+| Scheduled backup job | **NOT IMPLEMENTED** | Any RPO shorter than "when an operator remembers" |
+| WAL archiving / point-in-time recovery | **NOT IMPLEMENTED** | Any RPO measured in minutes |
+| Offsite / cross-region replication | **NOT IMPLEMENTED** | Surviving loss of the primary host or region |
+| Retention enforcement | **NOT IMPLEMENTED** | Meeting any retention commitment |
+| Encryption at rest for backups | **NOT IMPLEMENTED** | Handling customer documents offsite |
+| Backup monitoring / alerting | **NOT IMPLEMENTED** (F-09) | **Detecting** a missed backup or an overdue recovery |
+| Backup verification automation | **NOT IMPLEMENTED** | Knowing a backup is restorable without trying it |
+| Named operations owner / on-call | **NOT IDENTIFIED** | Any of the above being acted upon |
+
+Backup monitoring is a **prerequisite** for meeting an RTO, not a nice-to-have:
+without alerting, a missed backup is discovered only when a restore is needed.
+
+### Verdict
+
+```text
+RECOVERY REQUIREMENTS — PENDING BUSINESS APPROVAL
+```
+
+The recovery *procedure* is demonstrated and works. The recovery *requirements*
+do not exist. Both statements are true at once, and the second is the one that
+needs a human decision.
+
 ## Findings
 
 ### Findings from the backup/restore drill
@@ -1046,8 +1249,11 @@ F-02, F-03, F-04, F-05, F-06, F-07 and F-09 were **not** touched and remain
 | Evidence write path | UNKNOWN | **VERIFIED** — upload, SHA-256 correct, tenant-scoped storage, cross-tenant read blocked |
 | **Evidence vault restore** | **NOT TESTED** | **TESTED — PASS.** Vault destroyed and restored; restored SHA-256 equals the original. Both stores destroyed and recovered together; Flyway no-op; login and retrieval verified; tenant isolation survived |
 | Full two-store recovery | NOT DEMONSTRATED | **DEMONSTRATED** — DB restored first, then vault, per §4; evidence served and hash-verified |
+| **Approved RTO / RPO** | UNKNOWN | **STILL NOT DEFINED** — confirmed by exhaustive repository search; **not invented**. Decision document created: `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md` |
+| Observed recovery time | ~75 s (first drill) | **66.4 s** failure → health `UP`; **177.9 s** → verified usable (local synthetic, 115 KB) |
+| Observed recovery point | not measured | **245.8 s** — backup boundary proven exact; pre-backup data survived, post-backup data correctly lost |
 | Browser coverage | none | Chrome only; no Safari/Firefox/Edge; no WCAG audit |
-| Formal RTO / RPO | UNKNOWN | **STILL UNKNOWN** — no approved targets exist |
+| Formal RTO / RPO | UNKNOWN | **STILL NOT DEFINED** — no approved targets exist |
 
 ---
 
