@@ -4,6 +4,10 @@
 
 CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separation, deterministic calculation isolation, and an auditable event ledger.
 
+> **Phase 10.5:** the Node/Express gateway is **DECOMMISSIONED**. The API
+> layer below is the Java 21 / Spring Boot backend. Node/Express survives only
+> in Git history and in the Phase 10 evidence documents.
+
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        React / TypeScript SPA UI                       │
@@ -14,17 +18,18 @@ CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separat
 └────────────────────────────────────┬───────────────────────────────────┘
                                      │ REST / JSON (Bearer JWT)
 ┌────────────────────────────────────▼───────────────────────────────────┐
-│                       Express.js Application Gateway                   │
-│  - Auth Middleware (JWT Access, Refresh Token Rotation, RBAC Check)   │
-│  - Tenant Context Resolution (Validates User-to-Tenant Membership)     │
-│  - Rate Limiting & Input Validation                                   │
-│  - Unified API Envelope Formatter                                      │
+│                 Java 21 / Spring Boot Application Layer                │
+│  - JWT Authentication (Access Token, Refresh Token Rotation)          │
+│  - Method-Level Authorization (@PreAuthorize, 9 roles x 44 codes)    │
+│  - Tenant Context Resolution (Validates User-to-Tenant Membership)    │
+│  - Login Throttling, Input Validation, Unified API Envelope           │
+│  - Security Headers, Fail-Closed CORS Allow-List                     │
 └───────┬──────────────┬──────────────┬──────────────┬─────────────┬─────┘
         │              │              │              │             │
 ┌───────▼──────┐┌──────▼──────┐┌──────▼──────┐┌──────▼─────┐┌─────▼──────┐
 │ Organization ││ Activity &  ││ Calculation ││ Audit &    ││ Evidence   │
 │ & Boundary   ││ Data Request││ Engine      ││ Review     ││ Storage    │
-│ Domain       ││ Domain      ││ (Decimal.js)││ State Mach.││ Service    │
+│ Domain       ││ Domain      ││ (BigDecimal)││ State Mach.││ Service    │
 └───────┬──────┘└──────┬──────┘└──────┬──────┘└──────┬─────┘└─────┬──────┘
         │              │              │              │            │
 ┌───────▼──────────────▼──────────────▼──────────────▼────────────▼──────┐
@@ -32,6 +37,7 @@ CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separat
 │   - UUID Primary Keys        - Tenant Foreign Key Isolation            │
 │   - Versioned Factor Tables  - Immutable Calculation Snapshots         │
 │   - Audit Event Ledger       - Check Constraints & Index Tuning        │
+│   - Flyway V1-V8 (applied automatically at startup)                    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,8 +74,8 @@ CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separat
 | Component | Technology | Specification / Standard |
 | :--- | :--- | :--- |
 | **Frontend** | React 19 + TypeScript | Vite, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
-| **API Server (active)** | Node.js (TypeScript / Express) | RESTful JSON, RFC 7519 JWT, RFC 6749 Refresh Tokens |
-| **API Server (target)** | Java 21 + Spring Boot 3 (Maven, `backend-java/`) | Spring Security JWT + RBAC (9 roles × 44 permissions), plain JDBC — no ORM (ADR-009), Flyway, Controller → Service → Repository; converges to the active API contract before cutover (ADR-010) |
-| **Calculation Engine** | Deterministic Decimal (Decimal.js) | Emulates Java `BigDecimal`, 8-decimal precision, ROUND_HALF_UP |
-| **Relational Database** | PostgreSQL | Schema migrations with Flyway naming standard (`V1__...`, `V2__...`) |
-| **Storage** | Pluggable (Local / Supabase) | Multi-part uploads, SHA-256 hashing, 25 MB file limit |
+| **API Server (active, sole backend)** | Java 21 + Spring Boot 3 (Maven, `backend-java/`) | Spring Security JWT + RBAC (9 roles × 44 permissions), plain JDBC — no ORM (ADR-009), Flyway, Controller → Service → Repository |
+| **API Server (DECOMMISSIONED Phase 10.5)** | ~~Node.js (TypeScript / Express)~~ | Removed from the repository. Retained in Git history at `4cc8f30` and in the Phase 10 evidence documents. Served the same REST/JSON contract (RFC 7519 JWT, RFC 6749 Refresh Tokens) that the Java backend now owns. |
+| **Calculation Engine** | Deterministic Decimal (Java `BigDecimal`) | 8-decimal precision, ROUND_HALF_UP, in `GhgCalculationEngine` |
+| **Relational Database** | PostgreSQL | Schema migrations with Flyway naming standard (`V1__...`, `V8__...`), applied at startup |
+| **Storage** | Private filesystem evidence vault | Multi-part uploads, SHA-256 hashing, 25 MB file limit |

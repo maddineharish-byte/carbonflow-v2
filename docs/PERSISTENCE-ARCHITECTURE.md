@@ -29,12 +29,12 @@ Make PostgreSQL the source of truth for identity, authorization, and business do
 - Multi-table writes use an explicit `PoolClient` transaction.
 - PostgreSQL errors are mapped to safe domain errors without exposing SQL details.
 - PostgreSQL is the source of truth for identity, scope, activity, evidence metadata/links, calculations, and emission records in production; calculation and emission writes share the `calculation-repository.ts` transaction boundary.
-- No repository writes to `server/db.ts` arrays.
+- No repository falls back to in-memory arrays. PostgreSQL is the single source of truth for every domain. (The Node-era in-memory `server/db.ts` store was decommissioned in Phase 10.5.)
 - No in-memory fallback is allowed for production domain operations.
 
 ## Service rules
 
-Services own business workflows and transaction boundaries. Routes perform HTTP parsing, call services, and map domain errors to the standard API envelope. Services do not depend on Express request/response objects.
+Services own business workflows and transaction boundaries. Controllers perform HTTP parsing, call services, and map domain errors to the standard API envelope. Services do not depend on web-framework request/response objects.
 
 ## Connection ownership
 

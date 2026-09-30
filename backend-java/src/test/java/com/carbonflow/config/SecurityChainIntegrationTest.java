@@ -37,7 +37,7 @@ class SecurityChainIntegrationTest extends PostgresBackedIntegrationTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.error.message")
-                        .value("Missing or malformed Authorization header or token query parameter."));
+                        .value("Missing or malformed Authorization header."));
     }
 
     @Test

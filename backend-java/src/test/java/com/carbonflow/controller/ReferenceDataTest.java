@@ -50,7 +50,7 @@ class ReferenceDataTest extends AccountingTestBase {
 
         // no permission is required — but a principal is
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 getJson("/api/v1/reference/gwp-sets", null));
     }
 
@@ -106,7 +106,7 @@ class ReferenceDataTest extends AccountingTestBase {
         assertEquals(200,
                 getJson("/api/v1/reference/emission-factors", platform).status());
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 getJson("/api/v1/reference/emission-factors", null));
     }
 
@@ -132,7 +132,7 @@ class ReferenceDataTest extends AccountingTestBase {
         String platform = loginToken(PLATFORM_EMAIL, PASSWORD);
         assertEquals(200, getJson("/api/v1/reference/methodologies", platform).status());
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 getJson("/api/v1/reference/methodologies", null));
     }
 

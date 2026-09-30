@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Verifies that every error path is rendered in the platform envelope
@@ -127,5 +129,74 @@ class ApiExceptionHandlerTest {
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 10.4.1 finding 3: unsupported media type must be 415, not 500.
+    // ------------------------------------------------------------------
+
+    @Test
+    void unsupportedContentTypeYields415Envelope() throws Exception {
+        mockMvc.perform(post("/fault/echo")
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .content("name=acme"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
+    void unsupportedXmlContentTypeYields415Envelope() throws Exception {
+        mockMvc.perform(post("/fault/echo")
+                        .contentType(MediaType.APPLICATION_XML)
+                        .content("<name>acme</name>"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
+    void supportedJsonContentTypeStillSucceeds() throws Exception {
+        mockMvc.perform(post("/fault/echo")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"acme\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void malformedJsonStillYields400Not415() throws Exception {
+        // Malformed JSON is a 400 (INVALID_JSON); only the media type decides
+        // between 400 and 415. Guards against a too-broad handler.
+        mockMvc.perform(post("/fault/echo")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_JSON"));
+    }
+
+    @Test
+    void unsupportedMediaTypeEnvelopeLeaksNoInternals() throws Exception {
+        MvcResult result = mockMvc.perform(post("/fault/echo")
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .content("name=acme"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andReturn();
+
+        String body = result.getResponse().getContentAsString();
+        assertFalse(body.contains("org.springframework"),
+                "no framework class names may reach the client: " + body);
+        assertFalse(body.contains("com.carbonflow"),
+                "no application class names may reach the client: " + body);
+        assertFalse(body.contains("Exception"),
+                "no exception type names may reach the client: " + body);
+        assertFalse(body.contains("at "),
+                "no stack frames may reach the client: " + body);
+    }
+
+    @Test
+    void unrelatedFailureIsNotReclassifiedByTheMediaTypeHandler() throws Exception {
+        // The 500 branch must stay a 500: a blanket 400/415 catch is forbidden.
+        mockMvc.perform(get("/fault/boom"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"));
     }
 }

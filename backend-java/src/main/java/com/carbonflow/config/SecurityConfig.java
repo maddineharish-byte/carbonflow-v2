@@ -1,5 +1,6 @@
 package com.carbonflow.config;
 
+import com.carbonflow.config.SecurityHeadersFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,20 +48,23 @@ import java.util.Map;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(SecurityConfig.class);
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
     private final String allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           ObjectMapper objectMapper,
-                          @Value("${carbonflow.cors.allowed-origins}") String allowedOrigins) {
+                          @Value("${carbonflow.cors.allowed-origins:}") String allowedOrigins) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
         this.allowedOrigins = allowedOrigins;
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, SecurityHeadersFilter securityHeadersFilter) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
@@ -81,7 +85,8 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authenticationEntryPoint())
                         .accessDeniedHandler(accessDeniedHandler()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(securityHeadersFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }
@@ -96,12 +101,60 @@ public class SecurityConfig {
     }
 
     @Bean
+    public SecurityHeadersFilter securityHeadersFilter() {
+        return new SecurityHeadersFilter();
+    }
+
+    @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        return corsConfigurationSource(allowedOrigins);
+    }
+
+    /**
+     * Builds the single CORS allow-list from the raw configured value.
+     *
+     * <p>Phase 10.4.1 finding 5. The allow-list is <b>environment-owned</b>:
+     * {@code carbonflow.cors.allowed-origins} resolves from
+     * {@code CARBONFLOW_CORS_ALLOWED_ORIGINS} and has <b>no default</b>, so a
+     * deployment that never configures it trusts no browser origin at all
+     * (fail-closed — same-origin and server-to-server traffic are unaffected,
+     * and {@code Access-Control-Allow-Origin} is simply never emitted).
+     * The localhost origins that local React development needs live in the
+     * {@code dev} profile ({@code application-dev.properties}) instead of the
+     * shipped default, so {@code http://localhost:3000} — the retired
+     * Node/Express origin — is no longer implicitly trusted anywhere.
+     *
+     * <p>{@code allowCredentials} is always {@code true} (the API is
+     * cookie/Bearer authenticated and the React client needs it), so
+     * {@code *} is refused outright: a wildcard combined with credentials is
+     * rejected by browsers and is a well-known misconfiguration. Startup fails
+     * rather than silently degrading.
+     */
+    static CorsConfigurationSource corsConfigurationSource(String rawAllowedOrigins) {
+        List<String> origins = Arrays.stream(
+                        (rawAllowedOrigins == null ? "" : rawAllowedOrigins).split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
                 .toList();
+
+        if (origins.contains("*")) {
+            throw new IllegalStateException(
+                    "carbonflow.cors.allowed-origins must not contain '*': the CarbonFlow API sends "
+                            + "credentials, and wildcard origins cannot be combined with credentials. "
+                            + "List the exact frontend origins instead "
+                            + "(comma-separated), e.g. https://app.example.com.");
+        }
+
+        if (origins.isEmpty()) {
+            log.warn("CORS allow-list is empty (carbonflow.cors.allowed-origins / "
+                    + "CARBONFLOW_CORS_ALLOWED_ORIGINS is unset). Cross-origin browser requests are "
+                    + "refused. Set CARBONFLOW_CORS_ALLOWED_ORIGINS to the deployed frontend origin(s), "
+                    + "or start with the 'dev' profile for local React development.");
+        } else {
+            log.info("CORS allow-list: {} origin(s) configured; '*' is never accepted.", origins.size());
+        }
+
+        CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
@@ -117,7 +170,7 @@ public class SecurityConfig {
     private AuthenticationEntryPoint authenticationEntryPoint() {
         return (request, response, authException) ->
                 writeEnvelope(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED",
-                        "Missing or malformed Authorization header or token query parameter.");
+                        "Missing or malformed Authorization header.");
     }
 
     /**

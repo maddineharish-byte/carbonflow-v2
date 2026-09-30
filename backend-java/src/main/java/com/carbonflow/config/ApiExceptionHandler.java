@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -71,6 +72,31 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         return error(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED",
                 "HTTP method " + ex.getMethod() + " is not supported for this endpoint.");
+    }
+
+    /**
+     * Unsupported request body media type (Phase 10.4.1 finding 3). Spring MVC
+     * raises this when the {@code Content-Type} of a body-carrying request is
+     * not among the converters the handler method can read — e.g. a
+     * {@code application/x-www-form-urlencoded} body posted to a JSON endpoint.
+     *
+     * <p>It previously fell through to {@link #handleUnexpected(Exception)} and
+     * answered {@code 500 INTERNAL_ERROR}; the correct status is
+     * {@code 415 Unsupported Media Type}. The mapping is added for this one
+     * exception type only — every other failure keeps its existing branch, and
+     * a blanket {@code Exception -> 400} catch is deliberately not introduced.
+     *
+     * <p>The envelope is fixed text: the client's own {@code Content-Type} is
+     * echoed back by Spring's default error body, which is not a contract
+     * CarbonFlow promises, and echoing it would make the message
+     * request-dependent. Nothing server-side (converter list, class names,
+     * stack traces) is disclosed.
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException ex) {
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE",
+                "The request content type is not supported by this endpoint. Use application/json.");
     }
 
     /** Unknown API path. */

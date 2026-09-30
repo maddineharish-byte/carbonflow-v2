@@ -77,7 +77,7 @@
 - V5 adds composite tenant foreign keys for activity/facility and activity/reporting-period relationships.
 - V6 adds calculation snapshot columns (`factor_id`, `factor_unit`, `factor_source`, `factor_version_number`, `gwp_name`, `conversion_factor`), nonnegative checks, calculation/emission tenant composite foreign keys, tenant uniqueness indexes, and a per-calculation gas-result uniqueness index.
 - Activity production reads, creation, filtering, lookup for calculations, and supported status updates use `activity_data` through `activity-repository.ts`.
-- Evidence metadata and tenant-owned links use `evidence_records` and `evidence_links` through `evidence-repository.ts`. Metadata and optional links are created transactionally. Actual file bytes remain in the private adapter behind `server/storage.ts` and are never exposed as filesystem paths or public URLs.
+- Evidence metadata and tenant-owned links use the `evidence_records` and `evidence_links` tables through the Java evidence repository. Metadata and optional links are created transactionally. Actual file bytes remain in the private evidence vault on disk (`CARBONFLOW_EVIDENCE_VAULT_DIR`) and are never exposed as filesystem paths or public URLs.
 - Production calculation execution resolves factors and GWP sets from PostgreSQL, preserves the factor/version/source/GWP snapshot, and commits calculations, gas results, emission records, supersession, and activity status in one transaction through `calculation-repository.ts`.
 - Audits, inventory, targets, reduction projects, and organization settings remain on their existing non-PostgreSQL implementation paths and are outside TASK 2.5.
 

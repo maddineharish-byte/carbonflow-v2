@@ -5,8 +5,8 @@
 Carbon accounting requires deterministic arithmetic identical to financial ledgers. Standard IEEE-754 floating-point operations (`0.1 + 0.2 = 0.30000000000000004`) lead to cumulative discrepancies that fail external audit verification.
 
 ### Precision Standards
-- **Implementation**: Java `BigDecimal` (production) / TypeScript `Decimal.js` (frozen Node reference).
-- **Phase 6 note**: the Spring Boot backend's `GhgCalculationEngine` is the production implementation of this specification; `server/calc.ts` remains the read-only parity oracle.
+- **Implementation**: Java `BigDecimal` (sole implementation).
+- **Phase 10.5 note**: the Spring Boot backend's `GhgCalculationEngine` is the only implementation of this specification. The TypeScript `Decimal.js` parity oracle (`server/calc.ts`) was decommissioned with the Node backend; it remains in Git history at `4cc8f30` and in the Phase 10 evidence documents.
 - **Internal Computation Scale**: 28 decimal places (`MathContext`), reported snapshots at 8 decimal places for normalized quantities.
 - **Reporting Scale**: 4 decimal places for metric tonnes CO2e (`tCO2e`), 2 decimal places for kilogram CO2e (`kgCO2e`).
 - **Rounding Mode**: `HALF_UP` (standard accounting rounding); ledger totals accumulate **unrounded** products and round only at presentation.
@@ -126,7 +126,7 @@ Under GHG Protocol Scope 2 Guidance, organizations operating in markets with con
 
 ## 6. Engine Execution & Persistence (Phase 6, ADR-017)
 
-Production calculation for the Java API is owned by the Spring Boot backend — `CalculationService` (contract & batch orchestration), `GhgCalculationEngine` (pure deterministic arithmetic) and `CalculationPersistence` (the single transactional writer). Node's `server/calc.ts` / `server/calculation-repository.ts` remain frozen as the parity oracle.
+Production calculation is owned by the Spring Boot backend - `CalculationService` (contract & batch orchestration), `GhgCalculationEngine` (pure deterministic arithmetic) and `CalculationPersistence` (the single transactional writer). The Node parity oracle was decommissioned in Phase 10.5 and survives only in Git history.
 
 - **Run** (`POST /calculations/run`) reads the activity, its tenant anchors and the factor and GWP reference data *outside* any transaction, then persists in **one** transaction: the `calculation_gas_results` rows (engine order CO₂, CH₄, N₂O), the `calculations` snapshot, the `emission_records` row plus supersession of the activity's prior active record, and the activity's `CALCULATED` status. A duplicate deterministic hash (re-execution) rolls the whole transaction back — the ledger never holds two identical calculations.
 - **Batch** (`POST /calculations/batch-run`) runs one transaction per activity (independent, abort-on-error); activities with a missing factor, missing GWP set, unsupported unit or an audit-frozen period are reported as unprocessed (`total − processed`), never as failures.

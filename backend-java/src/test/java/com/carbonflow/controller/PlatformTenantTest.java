@@ -1,18 +1,23 @@
 package com.carbonflow.controller;
 
 import com.carbonflow.repository.SeedIds;
+import com.carbonflow.service.UuidContract;
 import com.carbonflow.testsupport.PostgresBackedIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
  * Registration → approval → activation lifecycle (greenfield, ADR-014):
@@ -201,6 +206,126 @@ class PlatformTenantTest extends PostgresBackedIntegrationTest {
         assertEquals(403, login.status());
         assertEquals("ORGANIZATION_NOT_ACTIVE", login.errorCode());
         assertEquals("The organization registration was not approved.", login.errorMessage());
+    }
+
+    // ------------------------------------------------------------------
+    // Tenant detail: GET /platform/tenants/{id}
+    // Phase 10.4.1 finding 2 (demo seed ids were not RFC-4122 conformant and
+    // therefore answered 404 for tenants that plainly existed).
+    // ------------------------------------------------------------------
+
+    @Test
+    void everyDemoSeedIdSatisfiesTheUuidContract() {
+        // The root cause, asserted directly: the detail endpoint gates on
+        // UuidContract.isNodeUuid, and the old seed fixture failed it.
+        assertTrue(UuidContract.isNodeUuid(SeedIds.ORG_ACME), SeedIds.ORG_ACME);
+        assertTrue(UuidContract.isNodeUuid(SeedIds.ORG_APEX), SeedIds.ORG_APEX);
+        assertTrue(UuidContract.isNodeUuid(SeedIds.ORG_PLATFORM), SeedIds.ORG_PLATFORM);
+        assertTrue(UuidContract.isNodeUuid(SeedIds.USER_ACME_ADMIN), SeedIds.USER_ACME_ADMIN);
+        assertTrue(UuidContract.isNodeUuid(SeedIds.USER_PLATFORM_ADMIN), SeedIds.USER_PLATFORM_ADMIN);
+    }
+
+    @Test
+    void platformAdminCanReadEveryDemoTenantById() throws Exception {
+        String platformToken = loginToken("platform.admin@carbonflow.test", SeedIds.DEMO_PASSWORD);
+
+        for (String organizationId : List.of(SeedIds.ORG_ACME, SeedIds.ORG_APEX, SeedIds.ORG_PLATFORM)) {
+            Api detail = getJson("/api/v1/platform/tenants/" + organizationId, platformToken);
+            assertEquals(200, detail.status(), organizationId + " -> " + detail.body());
+            assertEquals(organizationId, detail.body().path("data").path("id").asText());
+            assertEquals("ACTIVE", detail.body().path("data").path("status").asText());
+        }
+    }
+
+    @Test
+    void platformAdminCanReadATenantRegisteredOutsideItsOwnContext() throws Exception {
+        // Cross-tenant by construction: the org belongs to a signup that has
+        // nothing to do with the platform admin's tenant.
+        String organizationId = organizationId(register(uniqueEmail()));
+        String platformToken = loginToken("platform.admin@carbonflow.test", SeedIds.DEMO_PASSWORD);
+
+        Api detail = getJson("/api/v1/platform/tenants/" + organizationId, platformToken);
+        assertEquals(200, detail.status());
+        assertEquals("PENDING_ACTIVATION", detail.body().path("data").path("status").asText());
+    }
+
+    @Test
+    void tenantDetailStillCollapsesMalformedAndUnknownIdsIntoTheSame404() throws Exception {
+        String platformToken = loginToken("platform.admin@carbonflow.test", SeedIds.DEMO_PASSWORD);
+
+        List<String> indistinguishable = List.of(
+                "not-a-uuid",
+                "22222222-2222-2222-2222-222222222201",   // old, non-RFC-4122 fixture shape
+                "00000000-0000-0000-0000-000000000000",   // version 0
+                "22222222-2222-4222-c222-222222222201",   // invalid variant nibble
+                UUID.randomUUID().toString());            // well-formed but unknown
+
+        for (String organizationId : indistinguishable) {
+            Api detail = getJson("/api/v1/platform/tenants/" + organizationId, platformToken);
+            assertEquals(404, detail.status(), organizationId + " -> " + detail.body());
+            assertEquals("ORGANIZATION_NOT_FOUND", detail.errorCode());
+            assertEquals("Organization does not exist or access denied.", detail.errorMessage());
+        }
+    }
+
+    @Test
+    void companyAdminCannotReadTenantDetails() throws Exception {
+        String adminToken = loginToken("admin@acmeglobal.com", SeedIds.DEMO_PASSWORD);
+
+        Api detail = getJson("/api/v1/platform/tenants/" + SeedIds.ORG_ACME, adminToken);
+        assertEquals(403, detail.status());
+        assertEquals("FORBIDDEN", detail.errorCode());
+
+        Api unknown = getJson("/api/v1/platform/tenants/" + UUID.randomUUID(), adminToken);
+        assertEquals(403, unknown.status(), "a denied caller must not learn whether an id exists");
+    }
+
+    @Test
+    void anonymousTenantDetailIsUnauthorized() throws Exception {
+        Api detail = getJson("/api/v1/platform/tenants/" + SeedIds.ORG_ACME, null);
+        assertEquals(401, detail.status());
+        assertEquals("UNAUTHORIZED", detail.errorCode());
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 10.4.1 finding 3: an unsupported body media type must be 415.
+    // ------------------------------------------------------------------
+
+    @Test
+    void formEncodedBodyOnAJsonEndpointIs415Not500() throws Exception {
+        String platformToken = loginToken("platform.admin@carbonflow.test", SeedIds.DEMO_PASSWORD);
+
+        MvcResult result = mockMvc.perform(
+                        post("/api/v1/platform/tenants/" + SeedIds.ORG_APEX + "/suspend")
+                                .header("Authorization", "Bearer " + platformToken)
+                                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                .content("note=quarterly+review"))
+                .andReturn();
+
+        assertEquals(415, result.getResponse().getStatus());
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertFalse(body.path("success").asBoolean(true));
+        assertEquals("UNSUPPORTED_MEDIA_TYPE", body.path("error").path("code").asText());
+
+        String raw = result.getResponse().getContentAsString();
+        assertFalse(raw.contains("org.springframework"), raw);
+        assertFalse(raw.contains("com.carbonflow"), raw);
+
+        // The rejected request changed nothing.
+        assertEquals("ACTIVE", getJson("/api/v1/platform/tenants/" + SeedIds.ORG_APEX,
+                platformToken).body().path("data").path("status").asText());
+    }
+
+    @Test
+    void jsonBodyOnTheSameEndpointStillWorks() throws Exception {
+        String platformToken = loginToken("platform.admin@carbonflow.test", SeedIds.DEMO_PASSWORD);
+        String organizationId = organizationId(register(uniqueEmail()));
+        postJson("/api/v1/platform/tenants/" + organizationId + "/approve", platformToken, null);
+
+        Api suspended = postJson("/api/v1/platform/tenants/" + organizationId + "/suspend",
+                platformToken, "{\"note\":\"415 regression control\"}");
+        assertEquals(200, suspended.status());
+        assertEquals("SUSPENDED", suspended.body().path("data").path("status").asText());
     }
 
     // ------------------------------------------------------------------

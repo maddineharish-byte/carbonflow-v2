@@ -361,10 +361,10 @@ class CalculationRunTest extends AccountingTestBase {
                 runCalculation(auditor, activity.path("id").asText()));
         // unauthenticated
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 getJson("/api/v1/calculations/" + calculationId, null));
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 runCalculation(null, activity.path("id").asText()));
     }
 }

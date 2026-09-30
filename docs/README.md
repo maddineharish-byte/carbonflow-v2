@@ -34,8 +34,23 @@ Enterprise Greenhouse Gas (GHG) Accounting, Audit Preparation, Evidence Manageme
 ---
 
 ## 3. Quickstart
+
+Two processes. Start the API first (it applies Flyway migrations and listens on 8080):
+
+```bash
+cd backend-java
+mvn spring-boot:run
+```
+
+Then start the frontend dev server in a second terminal:
+
 ```bash
 npm install
 npm run dev
 ```
-Access the application at `http://localhost:3000`.
+
+- API: `http://localhost:8080` (health: `http://localhost:8080/api/v1/health`)
+- Frontend: `http://localhost:5173`
+
+The frontend calls the API through `VITE_JAVA_API_BASE_URL`. See
+`docs/EXECUTION.md` for the full runbook.

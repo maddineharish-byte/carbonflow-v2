@@ -23,7 +23,9 @@ class AuthServiceTest {
     private static AuthService service(String refreshSecret) {
         // Repositories/token provider are irrelevant for these checks: the
         // constructor validates the secret before anything is used.
-        return new AuthService(null, null, null, null, null, refreshSecret);
+        return new AuthService(null, null, null, null, null,
+                new LoginThrottle(5, 900_000L, 900_000L, java.time.Clock.systemUTC()),
+                refreshSecret);
     }
 
     @Test

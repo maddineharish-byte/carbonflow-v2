@@ -30,7 +30,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Validates the bearer token (or legacy {@code ?token=}) and — like the Node
+ * Validates the bearer token (from the {@code Authorization} header only —
+ * query-string tokens were removed in Phase 9) and — like the Node
  * reference backend's production path ({@code authenticateTenant}) —
  * <strong>re-validates the identity against PostgreSQL on every request</strong>:
  * the user must exist and be active, and hold an active membership in the
@@ -156,16 +157,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Map.of("success", false, "error", Map.of("code", code, "message", message)));
     }
 
+    /**
+     * Phase 9 hardening: the access token is accepted <b>only</b> through the
+     * {@code Authorization: Bearer} header. The Node-parity {@code ?token=}
+     * query parameter was removed: query strings leak credentials into browser
+     * history, proxy/access logs, {@code Referer} headers and server-side
+     * request logs, which no frontend feature requires (the React client has
+     * always used the authenticated blob/download flow).
+     */
     private String resolveToken(HttpServletRequest request) {
         String bearer = request.getHeader("Authorization");
         if (bearer != null && bearer.startsWith("Bearer ")) {
             return bearer.substring(7);
-        }
-        // NOTE: query-string tokens leak into logs and history; accepted only for
-        // legacy CSV/export links, mirroring the Node backend (?token=).
-        String tokenParam = request.getParameter("token");
-        if (tokenParam != null && !tokenParam.isBlank()) {
-            return tokenParam;
         }
         return null;
     }

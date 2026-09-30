@@ -23,7 +23,7 @@
 
 ### Project context
 
-- React 19 + Vite + **Tailwind v4** (`@tailwindcss/vite`), Express/TypeScript API.
+- React 19 + Vite + **Tailwind v4** (`@tailwindcss/vite`), Java 21 / Spring Boot REST API.
 - Dark theme: `bg-slate-950` page, `bg-slate-900` cards, emerald/sky accents.
 - Fonts loaded in `index.html`: Plus Jakarta Sans + JetBrains Mono.
 - Single authenticated shell with state-based view navigation (no URL routing).

@@ -17,7 +17,7 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | Authorization | RBAC: 9 roles × 44 permissions via `@PreAuthorize` | ported from `server/rbac.ts`, parity-tested (ADR-011) |
 | Persistence | Plain JDBC (`spring-boot-starter-jdbc`) + PostgreSQL | **no ORM** (ADR-009); identity (Phase 3), scope (Phase 4), governance + evidence (Phase 5), accounting (Phase 6) and reporting/targets/snapshots/platform administration (Phase 7) are JDBC-backed; only the self-test's in-memory fixtures remain |
 | Migrations | Flyway; single source `db/migration` (V1–V8) packaged onto the classpath | baseline strategy in ADR-012; run on every `mvn verify` against an embedded test PostgreSQL; **Phases 4–7 required no new migration** (ADR-015, ADR-016, ADR-017, ADR-018/019/020) |
-| Passwords | BCrypt cost 10 | identical to the Node backend's bcryptjs cost 10 |
+| Passwords | BCrypt cost 10 | matches the hash cost the historical reference backend used, so existing demo hashes remain verifiable |
 
 **Identity, scope, governance, accounting, and reporting are database-backed.** `organizations`, `users`, `organization_memberships`, `refresh_tokens` (ADR-014), `legal_entities`, `facilities`, `departments`, `reporting_periods`, `organizational_boundaries`, `boundary_facilities` (ADR-015), `carbon_audits`, `audit_checklist_items`, `review_findings`, `review_comments`, `correction_requests`, `audit_approvals`, `audit_lock_events`, `evidence_records`, `evidence_versions`, `evidence_links` (ADR-016), `activity_data`, `emission_factors`, `emission_factor_versions`, `gwp_sets`, `gwp_values`, `calculation_methodologies`, `calculations`, `calculation_gas_results`, `emission_records` (ADR-017) and `inventory_snapshots`, `carbon_targets`, `reduction_projects` (ADR-018/019) are served by JDBC repositories over PostgreSQL. Reporting aggregates (dashboard, trend insights, period summary, breakdown, CSV export) read those repositories directly — no second calculation engine, no fabricated series (ADR-018). The in-memory `repository/DataStore` now holds only facility/period fixtures for the platform self-test: its accounting maps were deleted in Phase 6 and the analytics/reports mocks were removed in Phase 7, so a second model cannot drift.
 
@@ -60,7 +60,8 @@ This directory is the **target backend** for CarbonFlow: Java 21, Spring Boot, M
 | `CARBONFLOW_REFRESH_TOKEN_SECRET` | HMAC-SHA256 key for refresh-token hashes, **≥ 32 bytes**. Fail-fast at startup; only the hash of a refresh token is ever stored. |
 | `CARBONFLOW_SEED_DEMO_DATA` | `true` enables the development identity seed (organizations/users/memberships). Default `false` — no demo credential is written without explicit opt-in. |
 | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection (`DB_PORT` defaults to 5432). Placeholders are unresolved by default, so startup fails fast when unset. |
-| `CORS_ORIGINS` | Optional comma-separated origin allow-list (default `http://localhost:3000,http://localhost:5173`). |
+| `CARBONFLOW_CORS_ALLOWED_ORIGINS` | Comma-separated exact browser origins allowed to call the API cross-origin. **No default — an empty value trusts no origin** (fail-closed). A `WARN` names this variable when it is empty. `*` is refused at startup with `IllegalStateException`, because credentials are always enabled and browsers reject that pairing. Localhost development origins live in the opt-in `dev` profile (`application-dev.properties`). This supersedes the retired `CORS_ORIGINS` variable (ADR-013 item 3, superseded by ADR-021). |
+| `CARBONFLOW_EVIDENCE_VAULT_DIR` | Filesystem directory for the private evidence vault. File bytes live here; metadata and tenant-owned links live in PostgreSQL. |
 
 ```bash
 cd backend-java

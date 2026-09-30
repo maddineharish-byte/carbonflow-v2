@@ -102,7 +102,7 @@ class EmissionLedgerTest extends AccountingTestBase {
                 getJson("/api/v1/emissions", platform));
         // unauthenticated
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 getJson("/api/v1/emissions", null));
     }
 }

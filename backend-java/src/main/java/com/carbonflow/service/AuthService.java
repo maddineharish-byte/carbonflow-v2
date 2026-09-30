@@ -88,6 +88,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
+    private final LoginThrottle loginThrottle;
     private final byte[] refreshSecret;
 
     public AuthService(IdentityRepository identityRepository,
@@ -95,12 +96,14 @@ public class AuthService {
                        RefreshTokenRepository refreshTokenRepository,
                        JwtTokenProvider jwtTokenProvider,
                        PasswordEncoder passwordEncoder,
+                       LoginThrottle loginThrottle,
                        @Value("${carbonflow.auth.refresh-secret:}") String refreshSecret) {
         this.identityRepository = identityRepository;
         this.organizationRepository = organizationRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordEncoder = passwordEncoder;
+        this.loginThrottle = loginThrottle;
         // Fail closed, mirroring JwtTokenProvider: no committed default value.
         if (refreshSecret == null || refreshSecret.isBlank()) {
             throw new IllegalStateException(
@@ -136,6 +139,11 @@ public class AuthService {
     }
 
     private AuthSession doLogin(LoginRequest request) {
+        // Phase 9: refuse a locked-out account before touching the password
+        // store, so an online attack cannot keep guessing while locked.
+        String throttleKey = loginThrottle.keyFor(request.getEmail());
+        loginThrottle.assertNotLocked(throttleKey);
+
         IdentityRepository.Principal principal =
                 identityRepository.loadPrincipalByEmail(request.getEmail()).orElse(null);
 
@@ -148,8 +156,13 @@ public class AuthService {
             matches = passwordEncoder.matches(request.getPassword(), principal.user().getPasswordHash());
         }
         if (!matches) {
+            // Count the miss (unknown account and wrong password alike — the
+            // response is identical, so the counter leaks nothing).
+            loginThrottle.recordFailure(throttleKey);
             throw new AuthException("INVALID_CREDENTIALS", "Invalid email or password.", HttpStatus.UNAUTHORIZED);
         }
+        // Correct credentials: the streak is irrelevant from here on.
+        loginThrottle.recordSuccess(throttleKey);
 
         User user = principal.user();
         if (!user.isActive()) {

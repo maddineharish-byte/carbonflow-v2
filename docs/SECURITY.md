@@ -80,7 +80,7 @@
    - Content magic bytes are checked alongside MIME types.
 2. **File Size Limit**: Strict 25 MB ceiling enforced at the gateway.
 3. **Checksum Verification**: System generates SHA-256 hash upon streaming receipt and stores it for tamper detection.
-4. **Storage Isolation**: Files are stored in tenant-partitioned private storage through `server/storage.ts`; path-boundary checks prevent traversal and direct filesystem-path disclosure.
+4. **Storage Isolation**: Files are stored in tenant-partitioned private storage by the Java evidence vault service; path-boundary checks prevent traversal and direct filesystem-path disclosure.
 5. **Metadata Authority**: Production evidence metadata and links are tenant-qualified in PostgreSQL. A link is inserted only after the referenced activity, audit, or facility is verified as owned by the authenticated organization.
 6. **Transactional Cleanup**: Evidence metadata and optional link creation occur in one PostgreSQL transaction. If persistence fails after file storage, the route deletes the stored file.
 7. **Download Authorization**: Download first fetches tenant-owned metadata from PostgreSQL. Cross-tenant IDs are indistinguishable from missing records, and internal `storagePath` values are omitted from API responses.
@@ -93,6 +93,6 @@
 2. **Reference Integrity**: A calculation locks and validates the referenced activity, facility, reporting period, factor version, and GWP set before persistence. Composite tenant foreign keys reject cross-tenant activity, facility, reporting-period, and calculation relationships at the database layer.
 3. **No IDOR/BOLA**: Cross-tenant calculation lookup, emission lookup, calculation execution, and emission listing return not-found or empty results without exposing internal SQL details.
 4. **Parameterized SQL**: `calculation-repository.ts` uses parameterized queries only; no request value is interpolated into dynamic SQL.
-5. **Fail Closed**: Production calculation and emission routes return structured 403/404/400/503 envelopes. PostgreSQL failures do not fall back to `server/db.ts` arrays and do not leak database error text.
+5. **Fail Closed**: Production calculation and emission endpoints return structured 403/404/400/503 envelopes. PostgreSQL failures do not fall back to in-memory arrays and do not leak database error text.
 6. **Snapshot Integrity**: Factor version, factor value/unit/source/year, GWP set/name, normalized quantity/unit, conversion factor, gas results, and calculation hash are persisted so historical results do not depend on a later active-factor change.
 7. **No Double Counting**: Recalculation supersedes prior active emission records for the activity inside the same transaction; only `ACTIVE` records are summed.

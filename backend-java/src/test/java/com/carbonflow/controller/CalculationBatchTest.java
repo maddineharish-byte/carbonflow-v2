@@ -99,7 +99,7 @@ class CalculationBatchTest extends AccountingTestBase {
                         "{\"reportingPeriodId\":\""
                                 + java.util.UUID.randomUUID() + "\"}"));
         assertEnvelope(401, "UNAUTHORIZED",
-                "Missing or malformed Authorization header or token query parameter.",
+                "Missing or malformed Authorization header.",
                 postJson("/api/v1/calculations/batch-run", null, "{}"));
     }
 
