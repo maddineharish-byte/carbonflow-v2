@@ -10,6 +10,7 @@
 | Operational-validation commit | `5eded10a1b33e912c79ed879e8cc00d482f110fc` |
 | Validation start | 2026-09-30 11:53:37 +05:30 (backup/restore) |
 | Browser UAT window | 2026-09-30 12:27 – 14:20 +05:30 |
+| Evidence vault recovery drill | 2026-09-30 13:49 – 14:03 +05:30 |
 | **Working tree at start** | **CLEAN** |
 | **Working tree at end** | **CLEAN** (plus untracked `drill-vault/`, a runtime evidence directory, not source) |
 | Commit history | Linear, unchanged by this exercise |
@@ -574,22 +575,321 @@ The drill deliberately did not fabricate an evidence upload, so the evidence
 | Cross-tenant read | blocked (404) |
 | **Restore / recovery of vault files** | **STILL NOT TESTED** |
 
-### `EVIDENCE VAULT RESTORE: NOT TESTED`
+### `EVIDENCE VAULT RESTORE: NOT TESTED` — **SUPERSEDED, SEE BELOW**
 
-This remains **untested**, and the distinction matters. Browser UAT has now
-proven the **write path** end to end: upload, hashing, tenant-scoped storage on
-disk, metadata persistence, UI listing, and access control. What has *not* been
-proven is the **recovery path** — no vault file was destroyed, backed up and
-restored, and no file was downloaded back and hash-verified after a restore.
+> **This statement was true when written and is now superseded.** The dedicated
+> vault recovery drill recorded in the next section destroyed and restored the
+> vault and proved byte-for-byte recovery. `EVIDENCE VAULT RESTORE: TESTED`.
 
-Consequently **full application recovery is still not demonstrated.**
-`docs/BACKUP-RECOVERY.md` correctly states that the database and the vault are
-two separate stores that must both be restored. Only the database half has been
-proven, and the vault half now has something that *could* be drilled but has not
-been.
+The reasoning that produced this verdict is preserved because it explains what
+the browser UAT had and had not proven: UAT proved the **write path** end to end
+(upload, hashing, tenant-scoped storage, metadata persistence, UI listing,
+access control) but not the **recovery path** — no vault file was destroyed,
+backed up and restored, and none was downloaded back and hash-verified.
 
-A vault recovery drill remains straightforward to run now that real evidence
-exists, but it was **not** performed here and is not claimed.
+---
+
+## EVIDENCE VAULT RECOVERY DRILL
+
+> Performed 2026-09-30 13:49–14:03 +05:30 against the frozen release at
+> `8072a62`. This closes the `EVIDENCE VAULT RESTORE: NOT TESTED` item. No
+> application code, migration or configuration was modified.
+
+### 1. Vault architecture actually in force
+
+Read from the frozen source and the running configuration, not assumed.
+
+| Property | Value |
+| --- | --- |
+| **Vault type** | Private **local filesystem** store (no cloud/object-storage dependency) |
+| **Config key** | `carbonflow.evidence.vault-dir` |
+| **Env override** | `CARBONFLOW_EVIDENCE_VAULT_DIR` |
+| **Default if unset** | relative `vault_storage`, resolved absolute under the process working directory |
+| **Layout** | `<vault>/<organization-uuid>/<epoch-ms>_<uuid8>_<sanitized-basename>` |
+| **Database metadata table** | `evidence_records` (created in `V1`), plus `evidence_versions` and `evidence_links` |
+| **Metadata columns** | `id`, `organization_id`, `file_name`, `file_size_bytes`, `mime_type`, `sha256_hash`, `storage_path`, `uploaded_by`, `created_at` |
+| **Maximum file size** | **25 MB** (26,214,400 bytes) — enforced by both a DB `CHECK` and the service |
+| **Allowed MIME types** | `application/pdf`, `text/csv`, xlsx, xls, docx, `image/png`, `image/jpeg`, `image/jpg`, `text/plain` |
+| **Hash algorithm** | **SHA-256** over the exact stored bytes (as expected) |
+| **Encryption at rest** | **None.** The service documents this explicitly and CarbonFlow does not claim otherwise |
+| **Path safety** | every read/delete resolves the path and verifies containment inside the base directory |
+
+### 2. Test environment and isolation proof
+
+| Property | Value |
+| --- | --- |
+| Database | **`carbonflow_vaultdrill`**, created from scratch at 13:49 for this drill |
+| Host / port / user | `localhost:5432`, `postgres` |
+| Schema / Flyway | `public`, V1–V8 applied from empty |
+| Vault directory | `C:\Users\coo\AppData\Local\Temp\carbonflow-vault-drill` (outside the repository) |
+| Contains customer data | **NO** — every byte is synthetic text written during this session |
+| Browser | Google Chrome 154.0.8037.58 (same dedicated instance as browser UAT) |
+
+**Deliberately not touched:** `carbonflow_dev`, `carbonflow_drill`,
+`carbonflow_nodeoff`, `ecotrace`, the repository's `vault_storage/` (which holds
+a Phase 10.4 test PDF), and the browser-UAT `drill-vault/`.
+
+### 3. Synthetic test file
+
+| Property | Value |
+| --- | --- |
+| Name | `carbonflow-vault-recovery-test.txt` |
+| Size | 201 bytes |
+| Content | The exact text specified for this drill — a declaration that it is synthetic, contains no customer information, no secrets and no personal information |
+| **`ORIGINAL SHA-256`** | **`eee2b49d4180b3d99a4cc2e9b49862853cba05a7a808518eb9e4759136e4212e`** |
+
+Computed with `Get-FileHash -Algorithm SHA256`, not asserted from memory.
+
+### 4. Ingestion through the real application
+
+Uploaded through the **actual CarbonFlow evidence UI** in Chrome — the file
+input on the Evidence Vault screen — not through an invented endpoint.
+
+| Property | Value |
+| --- | --- |
+| Evidence ID (canonical) | `f54175b4-b06f-4349-867b-e7a727e5ab21` |
+| Second record (see note) | `d68ed91a-de7e-421c-ae8c-b2447888eea2` |
+| Tenant | Acme Global Manufacturing — `22222222-2222-4222-8222-222222222201` |
+| DB `file_name` | `carbonflow-vault-recovery-test.txt` |
+| DB `file_size_bytes` | 201 |
+| DB `mime_type` | `text/plain` |
+| DB `sha256_hash` | `eee2b49d…4212e` — **equals the original** |
+| DB `storage_path` | `…\carbonflow-vault-drill\22222222-…-222222222201\1790756506397_ec558cde_carbonflow-vault-recovery-test.txt` |
+
+> **Note on the duplicate record.** The CDP driver dispatched a synthetic
+> `change` event in addition to the one Chrome fires natively, so the app
+> received the upload twice. Both records are byte-identical. This is an
+> artifact of my test harness, **not** a product defect.
+
+### 5. Physical file verification (pre-destruction)
+
+The stored filename is **not** the original name — the application renames it,
+exactly as `EvidenceStorageService` documents.
+
+| Check | Result |
+| --- | --- |
+| Physical file exists at the DB `storage_path` | **yes** |
+| Physical file readable | **yes** |
+| Filename transformed to `<millis>_<uuid8>_<name>` | **yes** — `1790756506397_ec558cde_carbonflow-vault-recovery-test.txt` |
+| Physical size | 201 bytes (matches DB) |
+| **Physical SHA-256 = original** | **yes** |
+
+### 6. Backups
+
+Both artifacts were taken from the documented procedures in
+`docs/BACKUP-RECOVERY.md` and then **verified**, not merely assumed to exist.
+
+**Database (§2.1 `pg_dump --format=custom`, §2.2 `pg_dumpall --globals-only`)**
+
+| Property | Value |
+| --- | --- |
+| Start / end | 13:52:30.767 → 13:52:32.389 |
+| Duration | **1.61 s** |
+| Artifact | `carbonflow-vaultdrill-20260930T135230Z.dump` |
+| Size | 113,342 bytes |
+| SHA-256 | `9cbd9637b916ec7f5bf0255d890758137f3471dad31fd17502442ea32efe3099` |
+| Exit code | **0** |
+| `pg_restore --list` | exit **0**, 254 TOC entries |
+| **Contains `evidence_records` data** | **yes** |
+| Contains `evidence_versions` data | yes |
+| Contains `flyway_schema_history` data | yes |
+| Globals artifact | `carbonflow-globals-20260930T135230Z.sql`, 950 bytes, exit 0 |
+
+**Evidence vault (§2.4)**
+
+The document specifies:
+
+```bash
+rsync -a --delete --exclude '*.tmp' "$CARBONFLOW_EVIDENCE_VAULT_DIR/" "/backup/evidence/<stamp>/"
+```
+
+This host is Windows and has no `rsync`. The platform equivalent that preserves
+`-a` (recursive, attribute-preserving) and `--delete` is `robocopy /MIR`, and
+the documented `*.tmp` exclusion was retained because the document specifies it
+(in-flight upload temp files must not be captured). **This substitution is a
+deviation from the literal command and is recorded as such** — the *semantics*
+are equivalent, but the procedure has not been executed with `rsync` itself.
+
+| Property | Value |
+| --- | --- |
+| Start / end | 13:52:56.867 → 13:52:57.086 |
+| Duration | **0.18 s** |
+| Artifact | `evidence-20260930T135230Z\` |
+| Files captured | **2** (402 bytes) |
+| Exit code | 1 (robocopy: files copied, success) |
+| Per-file SHA-256 | both `eee2b49d…4212e` — **equal the original** |
+| Additional archive | `evidence-20260930T135230Z.zip`, 872 bytes, SHA-256 `334264ff2b0c9a5e97d578310bb1e65fb1a8601ce883eea6b7c2818eeb68b72d` |
+
+**Cross-object ordering (§2.5):** the database and vault snapshots share the
+same timestamp `20260930T135230Z`, so the documented rule — *never restore a
+database newer than the vault* — is satisfied.
+
+### 7. Destruction proof
+
+| Property | Value |
+| --- | --- |
+| Target | `C:\Users\coo\AppData\Local\Temp\carbonflow-vault-drill` only |
+| Application quiesced first | yes (per §2.5, for a strict consistency guarantee) |
+| **Destruction timestamp** | **2026-09-30 13:53:47.550 +05:30** |
+| Duration | 0.02 s |
+| Vault directory afterwards | **does not exist** |
+| Files reachable afterwards | **0** |
+| **Pre-destruction file** | **EXISTS** |
+| **Post-destruction file** | **ABSENT** |
+
+### 8. Behaviour with metadata but no bytes
+
+Before restoring, the application was started against the orphaned metadata —
+the exact state `docs/BACKUP-RECOVERY.md` §5 calls *partial evidence loss*.
+
+| Check | Result |
+| --- | --- |
+| `GET /api/v1/evidence` | **200** — lists the orphaned records |
+| `GET /api/v1/evidence/{id}/download` | **404** `EVIDENCE_FILE_NOT_FOUND` |
+| Message | *"The evidence file is unavailable."* |
+
+The application **degrades honestly**: it does not fabricate success, and it
+does not silently repair the metadata. This is the behaviour §5 requires.
+
+### 9. Restoration and hash verification
+
+| Property | Value |
+| --- | --- |
+| Restore start | 13:55:57.411 |
+| Restore end | 13:55:57.494 |
+| Restore duration | **0.08 s** (2 files, 402 bytes) |
+| Method | §4 Step 5 (`rsync -a` in the document; `robocopy /E` here) |
+| Files restored | **2** |
+| **`RESTORED SHA-256`** | **`eee2b49d4180b3d99a4cc2e9b49862853cba05a7a808518eb9e4759136e4212e`** |
+| **`RESTORED` = `ORIGINAL`** | **PASS** |
+
+The restored file was **not** modified in any way to achieve this; it was
+hashed immediately after the copy.
+
+### 10. Full two-store recovery (the definitive test)
+
+To prove the documented §4 order works, **both** stores were destroyed and then
+recovered from the same backups.
+
+| Event | Timestamp |
+| --- | --- |
+| Vault destroyed | 14:00:14.422 |
+| Database dropped (`DROP DATABASE`, exit 0, existence re-confirmed 0) | ~14:00:19 |
+| `createdb` (exit 0) | 14:00:31 |
+| `pg_restore` (**exit 0, no errors**) | 14:00:34.283 |
+| Vault restored (2 files) | 14:00:34.283 |
+| Application healthy | 14:01:06.313 (Spring Boot logged 13.24 s startup) |
+| Login succeeded | 14:02:15 |
+| Evidence served, HTTP 200, hash verified | 14:02:16.385 |
+
+| Check | Result |
+| --- | --- |
+| `flyway_schema_history` after restore | **8 rows, all `success = t`, version 8** |
+| Application Flyway behaviour | `Successfully validated 8 migrations` → `Current version of schema "public": 8` → **`Schema "public" is up to date. No migration necessary.`** |
+| Login against restored database | **HTTP 200** — restored password hash verified |
+| Evidence metadata present | **yes**, both records, all columns intact |
+
+### 11. Application retrieval and tenant isolation
+
+| Check | Result |
+| --- | --- |
+| Evidence visible in the UI | **yes** — `Vault Repository (2 files)`, both rows showing the correct SHA-256 |
+| Download through the application | **HTTP 200**, 201 bytes, `text/plain` |
+| **Downloaded bytes SHA-256** | `eee2b49d…4212e` — **equal to the original** |
+| First line of downloaded content | `CARBONFLOW EVIDENCE VAULT RECOVERY TEST` |
+| Tenant A (Acme) reads its own evidence | **HTTP 200** |
+| Tenant B (Apex) lists evidence | **0 files** |
+| Tenant B (Apex) reads Tenant A's evidence | **HTTP 404** `EVIDENCE_NOT_FOUND` — *"Evidence document not found or cross-tenant access prohibited."* |
+
+Tenant isolation **survives the restore**.
+
+### 12. Final consistency (Step 21 — all five must agree)
+
+| Assertion | Result |
+| --- | --- |
+| Database evidence metadata = PRESENT | **yes** |
+| Physical evidence file = PRESENT | **yes** |
+| Database hash = ORIGINAL hash | **yes** |
+| Physical file hash = ORIGINAL hash | **yes** |
+| Tenant relationship = CORRECT | **yes** (Acme; cross-tenant access 404) |
+
+Additional confirmation: the physical file is **byte-for-byte identical** to the
+original upload (201 bytes, `Compare-Object` against the source returns no
+differences), and the bytes served by the application hash to the same value.
+**All four independently computed hashes are identical.**
+
+### 13. Observed recovery time
+
+**`OBSERVED RECOVERY TIME` — measured, not estimated**
+
+| Phase | Measured |
+| --- | --- |
+| Database backup (`pg_dump`) | 1.61 s |
+| Vault backup (copy) | 0.18 s |
+| Vault destruction | 0.02 s |
+| Database destruction (`DROP DATABASE`) | ~1.5 s |
+| Database restore (`createdb` + `pg_restore`) | 4.43 s |
+| Vault restore (2 files) | 0.11 s |
+| Application restart → health `UP` | **13.24 s** |
+| Health → login succeeded | 1.33 s |
+| Login → evidence served | < 1 s |
+
+| Span | Observed |
+| --- | --- |
+| Destruction → evidence served and hash-verified | **~122 s** |
+| Restore start → evidence served | ~105 s |
+| Restore complete → evidence served | ~102 s |
+
+**`FORMAL RTO: UNKNOWN`** — no approved RTO exists, and a single drill over a
+113 KB database and two 201-byte files, on local hardware, with no TLS, no
+network transfer and a warm JVM, cannot size one. The dominant cost here was
+application startup, not data recovery.
+
+**`FORMAL RPO: UNKNOWN`** — no RPO is defined, and backup is manual and
+on-demand with no scheduler.
+
+### 14. Findings and limitations
+
+**No application defect was found.** Every failure mode observed was either
+correct behaviour or an error in my own test harness:
+
+| # | Observation | Assessment |
+| --- | --- | --- |
+| V-1 | `pg_restore` reported 210 "already exists" errors in one attempt | **My scripting error.** I issued `CREATE DATABASE` without dropping first, so the restore targeted an already-populated schema. Repeated correctly (`DROP` → verify absent → `CREATE` → restore) it exited **0 with no errors**. Not a CarbonFlow defect. |
+| V-2 | Two evidence records instead of one | **My harness artifact** — a synthetic `change` event dispatched in addition to Chrome's own. Both records are byte-identical. Not a defect. |
+| V-3 | The application logs `ssl-mode is 'prefer'` on start | Expected and correct for this drill (`DB_SSLMODE=prefer`). §4 Step 8 requires investigating this before declaring a production restore complete. |
+| V-4 | Vault backup/restore used `robocopy`, not `rsync` | **Deviation, recorded.** `rsync` does not exist on this host. Semantics (`-a`, `--delete` / non-deleting copy, `*.tmp` exclusion) were preserved, but the documented command itself remains unexecuted. |
+
+**Limitations of this drill:**
+
+- Two files totalling 402 bytes. This proves *correctness* of the procedure, not
+  its *performance* at scale.
+- No encryption at rest was in force (CarbonFlow does not implement it), so the
+  §3.2 encryption step remains untested.
+- `rsync` itself was never executed; see V-4.
+- No scheduling, retention or offsite replication was exercised — all are
+  `NOT IMPLEMENTED` in this repository.
+- The evidence was not linked to an activity record (`evidence_links` is empty),
+  so relationship-level recovery was not exercised.
+
+### 15. Verdict
+
+```text
+EVIDENCE VAULT RECOVERY — PASS
+```
+
+`docs/BACKUP-RECOVERY.md` §1.2 states that backing up the database without the
+evidence vault "produces a system whose metadata references files that no longer
+exist." That exact failure state was created deliberately, observed, and then
+recovered from — with the restored bytes hashing identically to the original at
+every stage: on disk, in the database, in the backup, and as served by the
+application.
+
+The document's §6 statement that *"No rehearsal has been performed for this
+document"* is now superseded **for the vault and for the two-store recovery
+order**. It is still accurate for scheduled backup, retention, encryption at
+rest, offsite replication and backup monitoring, all of which remain
+`NOT IMPLEMENTED`.
 
 ---
 
@@ -744,7 +1044,8 @@ F-02, F-03, F-04, F-05, F-06, F-07 and F-09 were **not** touched and remain
 | Scope 2 dual reporting | UNKNOWN (API-level only) | **VERIFIED in the browser** — location and market strictly separated, never summed |
 | Registration → approval lifecycle | UNKNOWN (API-level only) | **VERIFIED in the browser** — pending refusal, approval, activation, tenant isolation |
 | Evidence write path | UNKNOWN | **VERIFIED** — upload, SHA-256 correct, tenant-scoped storage, cross-tenant read blocked |
-| Evidence vault **restore** | NOT TESTED | **STILL NOT TESTED** — real evidence now exists, but no vault file was destroyed and recovered |
+| **Evidence vault restore** | **NOT TESTED** | **TESTED — PASS.** Vault destroyed and restored; restored SHA-256 equals the original. Both stores destroyed and recovered together; Flyway no-op; login and retrieval verified; tenant isolation survived |
+| Full two-store recovery | NOT DEMONSTRATED | **DEMONSTRATED** — DB restored first, then vault, per §4; evidence served and hash-verified |
 | Browser coverage | none | Chrome only; no Safari/Firefox/Edge; no WCAG audit |
 | Formal RTO / RPO | UNKNOWN | **STILL UNKNOWN** — no approved targets exist |
 
@@ -782,20 +1083,27 @@ byte-identical to the source file with cross-tenant reads blocked; and logout
 correctly revokes the session.
 
 **Why the verdict is still PARTIAL.** Four frontend issues were found and
-**deliberately not fixed**, and three limitations remain untested:
+**deliberately not fixed**, and several limitations remain untested:
 
 - **B-01** — there is no registration or sign-up interface at all, so a new
   customer cannot onboard through the UI even though the backend lifecycle works.
 - **B-02 / B-03** — layout breaks at 768×1024 (five controls outside the
   viewport) and there is no mobile layout at all at 390×844.
 - **B-04** — `Escape` does not close modal dialogs and focus is not trapped.
-- **Evidence vault restore is still NOT TESTED.** Real evidence now exists, so
-  the drill is now possible, but no vault file has been destroyed and recovered.
+- **The evidence vault recovery drill now passes.** The vault was destroyed and
+  restored, and separately both stores were destroyed and recovered together.
+  The restored bytes hash identically to the original at every stage. This
+  closes the last major operational unknown from the first pass.
+- **Still untested:** scheduled/automated backup, retention enforcement,
+  encryption at rest, offsite replication, backup monitoring, and the literal
+  `rsync` command (this host has no `rsync`; `robocopy` was used equivalently).
 - **Formal RTO and RPO remain undefined**, and browser coverage is Chrome-only
   with no WCAG audit.
 
 None of these blocks release. None is a security, accounting or data-integrity
-defect. B-01 is the one a customer would notice first.
+defect. B-01 is the one a customer would notice first. The recovery procedures
+in `docs/BACKUP-RECOVERY.md` have now been demonstrated rather than assumed —
+which is a materially stronger position than the release was in an hour ago.
 
 **The release state is not changed by this exercise.** CarbonFlow remains:
 
