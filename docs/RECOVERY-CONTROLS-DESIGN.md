@@ -1062,3 +1062,86 @@ no drill, no schema change, no Flyway V9, no REST endpoint.
 
 **REC-03 — Database backup automation.** It produces the `Database` metadata
 (this manifest already accepts it) and invokes nothing from REC-04 onward.
+
+---
+
+## 26. REC-03 implementation status
+
+> **REC-03 STATUS: IMPLEMENTED**
+>
+> `pg_dump --format=custom` plus `pg_dumpall --globals-only` now executes and
+> returns structured metadata. **No other REC task is implemented.** The Evidence
+> Vault copy, boundary coordination, verification, retention, monitoring,
+> encryption, drills and RTO/RPO validation all remain NOT IMPLEMENTED.
+
+### As built
+
+| Property | Implementation |
+| --- | --- |
+| **pg_dump strategy** | `pg_dump --format=custom`, transactional, no server-side config change |
+| **Globals strategy** | `pg_dumpall --globals-only` — **mandatory**; a failure fails the whole set |
+| **Artefacts** | `<backupRoot>/<backupSetId>/database.dump` and `globals.sql` |
+| **backupSetId** | UUIDv4, generated per run; an existing set directory is refused rather than reused |
+| **Executable configuration** | `CARBONFLOW_PG_DUMP`, `CARBONFLOW_PG_DUMPALL`, `CARBONFLOW_PG_RESTORE`; otherwise `PATH` lookup using the platform's own separator |
+| **Timeout** | Configurable, 30 min default. A timeout fails the operation |
+| **Checksum** | Streaming SHA-256 per artefact; the file is never loaded into a byte array |
+| **Metadata result** | `PostgreSqlBackupResult`: paths, sizes, UTC timestamps, both digests, client version |
+| **Server version** | Probed via `pg_dump --version`; `null` when unreadable — **never fabricated** |
+| **Tests** | 33 unit + integration tests, including a real `pg_dump` verified by `pg_restore --list` |
+
+### Failure semantics — fail-closed
+
+Every one of these yields `success=false` with a **null** result, never a partial
+"success":
+
+```text
+pg_dump non-zero exit· pg_dump timeout       · pg_dumpall non-zero exit
+missing artefact   · zero-byte artefact     · artefact checksum failure
+tool not configured· server unreachable
+```
+
+A partial artefact is **deleted**, not kept. A truncated dump is worse than no
+dump: it looks restorable and is not. Cleanup is scoped to this attempt's own
+two files — there is no recursive delete anywhere in REC-03, because a broad
+delete here could destroy every other recovery set on the host.
+
+### Security controls implemented
+
+| Risk | Control |
+| --- | --- |
+| **Credential in argv** | Password passed **only** via `PGPASSWORD` in the child environment. `docs/BACKUP-RECOVERY.md` §2.1 requires this over a command-line argument, which is visible in the process table |
+| **Credential in logs** | `PostgreSqlBackupTarget.toString()` is overridden to redact. Only `argumentVector()` is logged, and it contains no secret |
+| **Command injection** | `ProcessBuilder` with an argument **array**. No shell, no `cmd.exe /c`, no concatenation. Metacharacters are inert bytes |
+| **TLS downgrade** | `DB_SSLMODE` is carried to libpq as `PGSSLMODE` unchanged; an unrecognised mode is **refused**, not passed through |
+| **Path traversal** | Backup root must be **absolute** and set directories are containment-checked after `normalize()` |
+| **Overwrite risk** | UUIDv4 set directory; existing directory refused |
+| **Hang** | Bounded timeout with `destroyForcibly()` |
+| **Interrupt handling** | `InterruptedException` restores the interrupt flag rather than swallowing it |
+
+### Two implementation bugs found and fixed during testing
+
+1. **The timeout could not fire.** The first version drained both pipes *before*
+   calling `waitFor(timeout)`, so a child that kept stdout open blocked the
+   drain and the timeout never got a chance. Both pipes are now drained on
+   concurrent daemon threads while the wait proceeds.
+2. **A killed child held its working directory.** The child was given the backup
+   set directory as its CWD; on Windows a timeout-killed process kept a handle
+   there, leaving a set directory that could not be deleted or retried. All
+   output paths are absolute, so the CWD is no longer changed at all.
+
+### Known limitations
+
+- **Not atomic with the Evidence Vault.** No atomicity is claimed. REC-05
+  computes the boundary.
+- **`--no-password`** means the backup fails rather than blocking on an
+  interactive prompt, which is correct for a scheduled job.
+- **No `pg_basebackup`, no WAL/PITR.** An hourly RPO does not require either.
+- **Not encrypted.** REC-09.
+- **Not verified.** The digests here are integrity metadata for the artefacts,
+  not a verification result. REC-06 owns verification.
+- **Local `PATH` fallback.** Where the tools are not on `PATH`, an operator must
+  set the environment variables. Documented, not guessed.
+
+### Next
+
+**REC-04 — Evidence Vault Backup.**
