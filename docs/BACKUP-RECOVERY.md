@@ -5,17 +5,42 @@
 > CarbonFlow architecture. No backup automation exists in this repository, and
 > no restore has been performed against production data.
 
-> ### ⚠ Status update — 2026-09-30
+> ### ⚠ Status update — 2026-09-30 (rehearsal)
 >
 > The procedures in §2.1, §2.2 and §2.4 and the recovery sequence in §4 have now
 > been **rehearsed** against an isolated scratch environment and are marked
 > **TESTED** where noted below. **No production restore has been performed.**
 >
-> **CarbonFlow has no approved RTO and no approved RPO.** Both remain **pending
-> business approval**. Nothing in this document constitutes a service-level
-> commitment. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
->
 > Rehearsal evidence: `docs/OPERATIONAL-VALIDATION.md`.
+
+> ### ⚠ Status update — 2026-10-01 (requirements approved)
+>
+> **Recovery requirements were approved on 2026-10-01:**
+>
+> ```text
+> APPROVED RTO:  4 hours
+> APPROVED RPO:  1 hour
+> BACKUP FREQUENCY: at least once every hour (database + evidence vault)
+> RETENTION:     30 days (database backups + evidence-vault backups)
+> EVIDENCE VAULT: same RTO/RPO and same recovery boundary as the database
+> RESTORE DRILL: quarterly
+> ```
+>
+> These are **project-level requirements, NOT contractual SLAs.**
+>
+> **Approved target ≠ implemented control ≠ validated compliance.** As of
+> 2026-10-01, every control these targets depend on is **NOT IMPLEMENTED**:
+> backup scheduling, retention enforcement, automated backup monitoring,
+> encryption at rest, and production HA/failover. The rehearsal below
+> demonstrated the **procedure**, not compliance with the 4-hour RTO or 1-hour
+> RPO — that validation is **NOT YET TESTED**.
+>
+> The 2026-09-30 status note above is retained as the historical record of the
+> rehearsal. Its statement that *"CarbonFlow has no approved RTO and no approved
+> RPO"* was **accurate when written; superseded by the approved project-level
+> recovery requirements dated 2026-10-01.**
+>
+> Full decision record: `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ## What "tested" means here
 
@@ -173,7 +198,13 @@ See §4 and §5 for handling and encryption.
 
 ### 3.1 Retention
 
-No retention policy is implemented in this repository — an operator must set one.
+> **Approved retention: 30 days**, covering both database backups and
+> evidence-vault backups (`docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`,
+> approved 2026-10-01). This is a **project-level requirement, not a
+> contractual SLA**, and **retention enforcement is NOT IMPLEMENTED** — an
+> operator must set one up. The observations below remain open context for that
+> implementation.
+
 Considerations:
 
 - Carbon accounting records are the evidentiary basis for disclosure. Retention
@@ -181,7 +212,9 @@ Considerations:
   organization reports in (see the globalization note in
   `docs/ARCHITECTURE.md`).
 - A common baseline is 7 years for GHG inventory data supporting a disclosure.
-  Confirm against the applicable regime rather than copying that number.
+  Confirm against the applicable regime rather than copying that number. **The
+  approved retention is 30 days; the 7-year figure remains an open regulatory
+  question and is not part of the current approval.**
 - `audit_lock_events` and the audit state machine represent governed sealing
   decisions. Restoring to a point *before* a governed lock must be a conscious,
   recorded choice, because it can un-seal an audit that was reported as locked.
@@ -224,8 +257,10 @@ key if backup operations are performed by more than one person.
 > verified. **No restore has been performed against production data.** Rehearse
 > into a scratch environment before relying on this in production.
 >
-> **The elapsed times observed in rehearsal are NOT an RTO.** CarbonFlow has no
-> approved RTO; see `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+> **The elapsed times observed in rehearsal are NOT the RTO.** The approved RTO
+> is **4 hours** (approved 2026-10-01); the observed figures are drill
+> measurements on a synthetic local dataset and do not demonstrate compliance
+> with it. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ### Step 1 — Prepare PostgreSQL
 
@@ -438,10 +473,14 @@ production, and at a defined interval thereafter:
 
 > ### ⚠ The elapsed time is NOT the RTO
 >
-> Step 4 produces an **observed recovery time**. It becomes an RTO only if a
-> named business owner has approved a target and the measurement is compared
-> against it. **CarbonFlow currently has no approved RTO**, so a recorded
-> elapsed time establishes nothing about compliance.
+> Step 4 produces an **observed recovery time**. It becomes evidence of meeting
+> the RTO only if a named business owner has approved a target **and** the
+> measurement is compared against it under representative conditions.
+>
+> **The approved RTO is 4 hours and the approved RPO is 1 hour** (approved
+> 2026-10-01). Comparing a rehearsal elapsed time against those targets at the
+> scale of a synthetic local dataset establishes **nothing** about compliance.
+> Compliance validation is **NOT YET TESTED**.
 >
 > See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
@@ -458,15 +497,23 @@ What that rehearsal established, and what it did **not**:
 
 - **Established:** the procedures in this document work, including the §2.5
   ordering rule and the §4 Step 5 vault restore.
-- **Did NOT establish an RTO or RPO.** `Formal RTO: NOT DEFINED`.
-  `Formal RPO: NOT DEFINED`. Both remain **pending business approval** — see
+- **Did NOT establish compliance with the approved RTO or RPO.** Targets have
+  since been approved (4 hours / 1 hour, 2026-10-01), but this rehearsal does
+  not validate them: it ran against a synthetic local dataset over loopback with
+  no scheduler, no monitoring and no HA. **RTO validation: NOT YET TESTED.
+  RPO validation: NOT YET TESTED.** See
   `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 - **Did NOT rehearse:** scheduled backup, retention, encryption at rest, offsite
   replication, backup monitoring, or `rsync` itself (this host is Windows; the
   drill used the platform-equivalent `robocopy`).
 
-**Rehearsal frequency is itself `NOT DEFINED` and is pending business
-approval.** No interval is prescribed.
+**Rehearsal frequency: `QUARTERLY`** (approved 2026-10-01 as a project-level
+requirement). **The cadence is NOT SCHEDULED** — one drill has been performed
+(2026-09-30); no calendar, owner rota or tracking exists. Responsible owner:
+CarbonFlow Operations. Required evidence per drill: database restore result,
+evidence-vault restore result, checksum/integrity verification, application
+retrieval verification, tenant-isolation verification, observed recovery
+duration, documented findings.
 
 ---
 
@@ -474,12 +521,14 @@ approval.** No interval is prescribed.
 
 | Capability | State |
 | --- | --- |
-| Scheduled/automated backup job | **NOT IMPLEMENTED** |
+| Scheduled/automated backup job | **NOT IMPLEMENTED** — required by the approved "at least once every hour" frequency |
 | Backup verification / restore rehearsal automation | **NOT IMPLEMENTED** |
 | Point-in-time recovery | **NOT IMPLEMENTED** — depends on PostgreSQL WAL archiving configured outside this repository |
 | Offsite / cross-region replication | **NOT IMPLEMENTED** |
-| Backup monitoring and alerting | **NOT IMPLEMENTED** (see finding F-09) |
-| Retention enforcement | **NOT IMPLEMENTED** |
+| Backup monitoring and alerting | **NOT IMPLEMENTED** (see finding F-09) — required by the approved monitoring requirement |
+| Retention enforcement | **NOT IMPLEMENTED** — required by the approved 30-day retention |
+| Encryption at rest for backups | **NOT IMPLEMENTED** — required to hold confidential customer documents under the approved retention |
+| Production HA / failover | **NOT IMPLEMENTED** — single instance; the drill assumed the same host returns |
 
 This repository contains no Dockerfile, container manifest, CI pipeline or
 infrastructure-as-code definition. Every operational step in this document is

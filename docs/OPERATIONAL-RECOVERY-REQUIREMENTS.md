@@ -843,10 +843,38 @@ Formal compliance test                  NOT YET TESTED
 
 ## 14a. Cross-document discrepancy register
 
-The 2026-10-01 approval makes the following statements in other documents
-historically accurate but currently **stale**. They are recorded here rather
-than edited, because the release freeze permits changes only to this
-recovery-requirements document.
+**RESOLVED — documentation-only consistency pass, 2026-10-01.** The stale
+pre-approval wording identified below has been corrected in all five documents.
+Each correction either updates a *current-state* claim or annotates a
+*historical* statement as superseded, preserving it unchanged.
+
+| Document | Location | Former stale statement | Disposition |
+| --- | --- | --- | --- |
+| `README.md` | Documentation table + recovery note | *"Pending business approval… not yet defined"*, *"no approved RTO and no approved RPO"* | **Updated** to current approved state |
+| `README.md` | Known limitations | *"Backup/restore procedures have not been verified."* | **Updated** — procedure rehearsed 2026-09-30; compliance NOT YET DEMONSTRATED |
+| `docs/BACKUP-RECOVERY.md` | Status banner | *"CarbonFlow has no approved RTO and no approved RPO… pending business approval"* | **Superseded banner added**; original retained as historical |
+| `docs/BACKUP-RECOVERY.md` | §3.1 Retention | No approved retention | **Updated** to 30 days, enforcement NOT IMPLEMENTED |
+| `docs/BACKUP-RECOVERY.md` | §4 warning | *"CarbonFlow has no approved RTO"* | **Updated** — RTO is 4 hours |
+| `docs/BACKUP-RECOVERY.md` | §6 warning + rehearsal status | *"CarbonFlow currently has no approved RTO"*; *"Formal RTO: NOT DEFINED"* | **Updated** with historical note; *"did not establish an RTO"* claim preserved |
+| `docs/BACKUP-RECOVERY.md` | §6 rehearsal frequency | *"Rehearsal frequency is NOT DEFINED"* | **Updated** to quarterly, cadence NOT SCHEDULED |
+| `docs/BACKUP-RECOVERY.md` | §7 not-implemented table | Listed capabilities without approved-requirement linkage | **Updated** with required-by column and encryption/HA rows |
+| `docs/OPERATIONAL-VALIDATION.md` | RTO/RPO definition section | `APPROVED RTO/RPO: NOT DEFINED`; *"no approved RTO exists"* | **Historical framing added** + current-state block |
+| `docs/OPERATIONAL-VALIDATION.md` | Drill results (≈L844, L911) | `FORMAL RTO: UNKNOWN` | **Annotated historical**, dated, with supersession note |
+| `docs/OPERATIONAL-VALIDATION.md` | Results against target | *"NOT TESTED — no approved RTO exists to compare against"* | **Updated** to NOT YET TESTED / REQUIREMENT NOT DEMONSTRATED; historical note retained |
+| `docs/OPERATIONAL-VALIDATION.md` | Requirements still to be decided | All values `NOT DEFINED` | **Updated** to approved values |
+| `docs/OPERATIONAL-VALIDATION.md` | Verdict + final verdict | *"RECOVERY REQUIREMENTS — PENDING BUSINESS APPROVAL"* | **Updated**; OPERATIONAL VALIDATION — PARTIAL retained |
+| `docs/RELEASE-HANDOVER.md` | §4 update block | *"The RTO is still NOT DEFINED… pending business approval"* | **Superseded banner added**; original retained and marked historical |
+| `docs/RELEASE-HANDOVER.md` | §7 NOT VERIFIED table | *"The RTO is still `NOT DEFINED`"* | **Annotated historical**; RTO/RPO compliance row added |
+| `docs/RELEASE-HANDOVER.md` | §8 operational warning 3 | *"no approved RTO or RPO"* | **Updated** with 2026-10-01 approval and NOT IMPLEMENTED controls |
+| `docs/FINAL-RELEASE-REPORT.md` | Operational state table | *"The RTO is still `NOT DEFINED`"* | **Annotated historical**; RTO/RPO compliance row added |
+| `docs/FINAL-RELEASE-REPORT.md` | Known limitation 3 | *"The RTO remains `NOT DEFINED` — pending business approval"* | **Dated addendum added**; original clause retained |
+
+### Verification after this pass
+
+No document claims `RTO COMPLIANT`, `RPO COMPLIANT`, `PRODUCTION READY`,
+`FULL OPERATIONAL VALIDATION`, or that the RTO/RPO are met. Remaining
+occurrences of pre-approval wording are explicitly labelled historical with a
+date, or describe the 2026-09-30 validation window as it stood.
 
 | Document | Location | Stale statement | Correction |
 | --- | --- | --- | --- |

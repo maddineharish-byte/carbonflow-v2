@@ -128,7 +128,11 @@ configuration, not hardcoded values. Facilities may span multiple countries.
 - **No external production deployment has been performed.** Everything
   verified here is local/runtime verification. This repository documents the
   cutover; it is not evidence of a live deployment.
-- Backup/restore procedures have not been verified.
+- **Recovery requirements are approved but not implemented.** Targets are RTO 4
+  hours and RPO 1 hour (project-level, not SLA). The backup/restore *procedure*
+  was rehearsed successfully on 2026-09-30, but there is no backup scheduler, no
+  retention enforcement, no backup monitoring and no HA/failover, so compliance
+  with those targets is **NOT YET DEMONSTRATED**.
 - The frontend uses state-based navigation rather than URL routing.
 
 ## Documentation
@@ -146,14 +150,23 @@ configuration, not hardcoded values. Facilities may span multiple countries.
 | `docs/RBAC.md` | Role and permission matrix |
 | `docs/AUDIT_WORKFLOW.md` | Audit state machine |
 | `docs/BACKUP-RECOVERY.md` | Backup and recovery procedures |
-| `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md` | **Pending business approval.** RTO/RPO/retention/ownership decisions that are **not yet defined** |
+| `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md` | **Approved 2026-10-01.** RTO 4 hours, RPO 1 hour, hourly backups, 30-day retention, ownership, monitoring, quarterly drill — **project-level requirements, not implemented** |
 | `docs/OPERATIONAL-VALIDATION.md` | Operational validation and recovery-drill evidence |
 
-> **Recovery objectives:** CarbonFlow has **no approved RTO and no approved
-> RPO**. Recovery *capability* has been demonstrated by drill; recovery
-> *requirements* remain pending business approval. See
-> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. Do not quote any measured
-> recovery figure as a service commitment.
+> **Recovery objectives:** CarbonFlow's project-level recovery requirements were
+> **approved on 2026-10-01** — **RTO 4 hours**, **RPO 1 hour**, backups at least
+> hourly (database **and** evidence vault, same recovery boundary), 30-day
+> retention, automated backup monitoring, quarterly restore drill.
+>
+> These are **project-level requirements, not contractual SLAs**, and they are
+> **not yet implemented or validated**. There is no backup scheduler, no
+> retention enforcement, no backup monitoring and no HA/failover in this
+> repository. The 2026-09-30 recovery drill demonstrated the *procedure*; it did
+> **not** demonstrate compliance with the 4-hour RTO or 1-hour RPO.
+>
+> **Approved target ≠ implemented control ≠ validated compliance.** Do not quote
+> any measured drill figure as a service commitment. See
+> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ### Phase 10 evidence (historical — read as a record, not as current state)
 

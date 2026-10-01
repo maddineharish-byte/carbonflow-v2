@@ -105,7 +105,8 @@ certificate verification is made anywhere.
 | Browser UAT | **NOT VERIFIED** | No desktop browser was available. Nothing has been exercised in a browser. — **SUPERSEDED 2026-09-30:** real browser UAT has since been performed in Chrome 154 (16 of 18 areas PASS). See `docs/OPERATIONAL-VALIDATION.md`. |
 | External deployment | **NOT VERIFIED** | Never performed or attempted. — **STILL TRUE.** |
 | Backup execution | **NOT TESTED** | Procedure documented; no backup run. — **SUPERSEDED 2026-09-30:** backups have since been taken and verified. |
-| Restore execution | **NOT TESTED** | ~~No restore performed; **RTO unknown**.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256 and tenant isolation intact. **The RTO is still `NOT DEFINED`**, now because no business owner has approved a target. |
+| Restore execution | **NOT TESTED** | ~~No restore performed; **RTO unknown**.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256 and tenant isolation intact. **HISTORICAL — accurate when written; superseded by the approved project-level recovery requirements dated 2026-10-01** (RTO 4 h, RPO 1 h). The clause *"The RTO is still `NOT DEFINED`"* described the position on 2026-09-30. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. |
+| RTO / RPO compliance | **NOT YET TESTED** | — **NEW 2026-10-01.** Targets approved (RTO 4 h, RPO 1 h) as **project-level requirements, not contractual SLAs**, but **REQUIREMENT NOT DEMONSTRATED**. The 2026-09-30 drill demonstrated the procedure, not compliance. |
 | Backup automation | **NOT IMPLEMENTED** | No scheduled job in the repository. — **STILL TRUE.** Backups remain manual and on demand. |
 | Monitoring / alerting | **NOT IMPLEMENTED** | No metrics, alerting, or probe manifest. — **STILL TRUE** (F-09). |
 | Graceful shutdown | **NOT IMPLEMENTED** | In-flight requests are cut on restart. — **STILL TRUE.** |
@@ -147,9 +148,19 @@ silently fixed.
    rehearsed. RTO is unknown.
    — **UPDATE 2026-09-30:** the procedure has now been rehearsed against an
    isolated scratch environment and verified, including evidence-vault recovery.
-   The RTO remains **`NOT DEFINED`** — pending business approval, not pending
-   testing. Recovery capability has been demonstrated; recovery requirements
-   have not been decided. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+   **HISTORICAL — accurate when written; superseded by the approved
+   project-level recovery requirements dated 2026-10-01.** The clause *"The RTO
+   remains `NOT DEFINED` — pending business approval"* described the position on
+   2026-09-30 and is retained above as the record of that date.
+   — **UPDATE 2026-10-01:** recovery requirements are now **APPROVED** —
+   **RTO 4 hours**, **RPO 1 hour**, backups at least hourly (database +
+   evidence vault, same recovery boundary), 30-day retention, automated
+   monitoring, quarterly drill. These are **project-level requirements, not
+   contractual SLAs**, and **none of the required controls is implemented**:
+   no scheduler, no retention enforcement, no monitoring, no HA/failover.
+   **RTO validation: NOT YET TESTED. RPO validation: NOT YET TESTED —
+   REQUIREMENT NOT DEMONSTRATED.** See
+   `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 4. **No monitoring.** Failures will be silent unless instrumentation is added.
 5. **Shutdown is not graceful.**
 6. **Evidence vault defaults to a relative path** — set

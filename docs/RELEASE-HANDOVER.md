@@ -242,11 +242,35 @@ control, and a 12-step recovery procedure. Every procedure there is labelled
 > restored database; a restored evidence file matched its original SHA-256 at
 > four independent points. Evidence: `docs/OPERATIONAL-VALIDATION.md`.
 >
-> **The RTO is still NOT DEFINED** — but now for the decisive reason that
-> **no business owner has approved a target**, not because the procedure is
-> untested. Recovery capability has been demonstrated; recovery requirements
-> remain pending business approval. See
-> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
+> **Historical statement — accurate when written; superseded by the approved
+> project-level recovery requirements dated 2026-10-01.** The clause *"The RTO
+> is still NOT DEFINED … recovery requirements remain pending business approval"*
+> described the position on 2026-09-30 and is retained unchanged above.
+
+> ### ⚠ Update — 2026-10-01: recovery requirements approved
+>
+> ```text
+> APPROVED RTO:        4 hours
+> APPROVED RPO:        1 hour
+> BACKUP FREQUENCY:    at least once every hour (database + evidence vault)
+> RETENTION:           30 days (both stores)
+> RESTORE DRILL:       quarterly
+> CLASSIFICATION:      PROJECT-LEVEL REQUIREMENT — NOT A CONTRACTUAL SLA
+> APPROVAL STATUS:     APPROVED — COMPLETE (CarbonFlow Project Owner)
+> ```
+>
+> **The evidence vault carries the same RTO/RPO as the database**, and a
+> database-only restore is not a complete recovery.
+>
+> **Approved target ≠ implemented control ≠ validated compliance.** As of
+> 2026-10-01 the required controls are **NOT IMPLEMENTED**: no backup scheduler,
+> no retention enforcement, no backup monitoring, no encryption at rest, no
+> production HA/failover. The 2026-09-30 rehearsal demonstrated the **procedure**;
+> it did **not** demonstrate the 4-hour RTO or 1-hour RPO. **RTO validation:
+> NOT YET TESTED. RPO validation: NOT YET TESTED.**
+>
+> The release remains **`RELEASE CANDIDATE — FROZEN`** and is **not production
+> ready**. Full record: `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`.
 
 ---
 
@@ -328,8 +352,9 @@ a release blocker; each is a product, architecture, or operations decision.
 | **Live TLS handshake** | No TLS-enabled PostgreSQL was available. The TLS *configuration* is verified and fails closed correctly, but a successful encrypted handshake and certificate rejection have not been observed. |
 | **External production deployment** | No deployment was performed or attempted. This is local/runtime verification only. |
 | **TLS certificates / PKI** | No certificates were provisioned; `verify-ca`/`verify-full` have not been exercised against a real CA. |
-| **Backup execution** | No backup has been taken by a defined schedule; no automation exists. — **STILL TRUE** (2026-09-30: backups remain manual and on demand; no scheduler exists) |
-| **Restore execution** | ~~No restore has been performed. The RTO is unknown.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256. **The RTO is still `NOT DEFINED`**, now because no business owner has approved a target. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. |
+| **Backup execution** | No backup has been taken by a defined schedule; no automation exists. — **STILL TRUE** (2026-09-30 and 2026-10-01: backups remain manual and on demand; no scheduler exists, so the approved "at least once every hour" frequency is **NOT IMPLEMENTED**) |
+| **Restore execution** | ~~No restore has been performed. The RTO is unknown.~~ — **SUPERSEDED 2026-09-30.** A restore has since been performed against an isolated scratch environment and verified, including evidence-vault recovery with a matching SHA-256. **HISTORICAL — accurate when written; superseded by the approved project-level recovery requirements dated 2026-10-01** (RTO 4 h, RPO 1 h, **NOT YET TESTED**). The 2026-09-30 clause *"The RTO is still `NOT DEFINED`"* described the position on that date. See `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. |
+| **RTO / RPO compliance** | — **NEW 2026-10-01.** Targets approved (4 h / 1 h) but **NOT YET TESTED — REQUIREMENT NOT DEMONSTRATED**. The 2026-09-30 drill demonstrated the procedure, not compliance. |
 | **Performance** | No load, latency, or throughput measurement was taken. |
 | **Multi-instance / HA** | The login throttle and pool configuration were not exercised under multiple instances. |
 
@@ -369,9 +394,14 @@ Read these before assuming the system is production-ready in every respect.
    — **UPDATE 2026-09-30:** the procedure has now been rehearsed against an
    isolated scratch environment and verified (including evidence-vault recovery).
    **Still true and still important:** backups are **manual and on demand**,
-   there is **no scheduler**, **no retention enforcement**, and **no approved
-   RTO or RPO**. Rehearse again against *your own* environment before trusting
-   it in production, and note that `rsync` itself was never exercised (the
+   there is **no scheduler**, **no retention enforcement**, **no backup
+   monitoring**, and **no HA/failover**.
+   — **UPDATE 2026-10-01:** requirements were approved on that date — **RTO 4
+   hours, RPO 1 hour**, hourly backups, 30-day retention, quarterly drill —
+   as **project-level requirements, not contractual SLAs**. **None of the
+   required controls is implemented, and compliance is NOT YET TESTED.**
+   Rehearse again against *your own* environment before trusting it in
+   production, and note that `rsync` itself was never exercised (the
    drill host is Windows; `robocopy` was used equivalently).
 
 4. **There is no monitoring.** You will not be told about lockouts, pool

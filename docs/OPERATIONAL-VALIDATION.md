@@ -841,13 +841,17 @@ differences), and the bytes served by the application hash to the same value.
 | Restore start → evidence served | ~105 s |
 | Restore complete → evidence served | ~102 s |
 
-**`FORMAL RTO: UNKNOWN`** — no approved RTO exists, and a single drill over a
-113 KB database and two 201-byte files, on local hardware, with no TLS, no
-network transfer and a warm JVM, cannot size one. The dominant cost here was
-application startup, not data recovery.
+**`FORMAL RTO: UNKNOWN`** *(historical, as of 2026-09-30)* — no approved RTO
+existed at the time of this drill, and a single drill over a 113 KB database and
+two 201-byte files, on local hardware, with no TLS, no network transfer and a
+warm JVM, could not size one. The dominant cost here was application startup, not
+data recovery. **Superseded 2026-10-01: an RTO of 4 hours was approved. This
+drill does not validate it — compliance is NOT YET TESTED.**
 
-**`FORMAL RPO: UNKNOWN`** — no RPO is defined, and backup is manual and
-on-demand with no scheduler.
+**`FORMAL RPO: UNKNOWN`** *(historical, as of 2026-09-30)* — no RPO was defined,
+and backup is manual and on-demand with no scheduler. **Superseded 2026-10-01:
+an RPO of 1 hour was approved. No scheduler exists to support it, so the actual
+recovery point remains unbounded and compliance is NOT YET TESTED.**
 
 ### 14. Findings and limitations
 
@@ -908,13 +912,18 @@ rest, offsite replication and backup monitoring, all of which remain
 timestamp (11:58:26.919) to health `UP` (≈11:59:41.5), on a 114 KB synthetic
 dataset on local hardware.
 
-**`FORMAL RTO: UNKNOWN`** — no approved RTO exists for CarbonFlow, and a single
-114 KB drill is not a valid basis for one. Larger datasets, TLS, network latency
-and cold JVM/disk caches are all absent from this measurement.
+**`FORMAL RTO: UNKNOWN`** *(historical, as of 2026-09-30)* — no approved RTO
+existed for CarbonFlow at the time of this drill, and a single 114 KB drill is
+not a valid basis for one. Larger datasets, TLS, network latency and cold
+JVM/disk caches are all absent from this measurement. **Superseded 2026-10-01:
+an RTO of 4 hours was approved. This drill does not validate it — compliance is
+NOT YET TESTED.**
 
-**`FORMAL RPO: UNKNOWN`** — no RPO is defined anywhere in the project. This drill
-used a manual, operator-initiated backup; there is no scheduler, so no
-protection interval can be inferred.
+**`FORMAL RPO: UNKNOWN`** *(historical, as of 2026-09-30)* — no RPO was defined
+anywhere in the project at that time. This drill used a manual,
+operator-initiated backup; there is no scheduler, so no protection interval can
+be inferred. **Superseded 2026-10-01: an RPO of 1 hour was approved. No
+scheduler exists to support it — compliance is NOT YET TESTED.**
 
 **Recovery point:** the backup captured the complete drill database as at
 11:58:07, taken with the application quiesced, so no gap between the last
@@ -934,9 +943,9 @@ application write and the backup was observed.
 >
 > | Concept | Meaning | State |
 > | --- | --- | --- |
-> | **Observed capability** | What a drill actually demonstrated | Measured below |
-> | **Approved requirement** | What the business formally requires | **NOT DEFINED** |
-> | **Compliance result** | Whether measurement satisfies the requirement | **CANNOT BE DETERMINED** |
+> | **Observed capability** | What a drill actually demonstrated | **DEMONSTRATED** (measured below) |
+> | **Approved requirement** | What the business formally requires | **APPROVED 2026-10-01** — RTO 4 h, RPO 1 h |
+> | **Compliance result** | Whether measurement satisfies the requirement | **NOT YET TESTED — REQUIREMENT NOT DEMONSTRATED** |
 >
 > The observed figures in this section are **drill measurements, not approved
 > service objectives.** Specifically, these are **false** and must never be
@@ -947,31 +956,70 @@ application write and the backup was observed.
 > ✗ RTO = 177.9 s    ✗ RPO COMPLIANT     ✗ RPO MET / MISSED
 > ```
 >
-> **Until business approval exists, CarbonFlow has no formal RTO/RPO
-> commitment.** Recovery capability has been demonstrated; recovery requirements
-> remain pending business approval.
+> **Recovery requirements were approved on 2026-10-01** — see
+> `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. **Approved target ≠ implemented
+> control ≠ validated compliance.** None of the required controls is
+> implemented, and this drill does not validate the targets.
+>
+> **Historical statement — accurate when written (2026-09-30); superseded by
+> the approved project-level recovery requirements dated 2026-10-01.** The
+> original wording of this section recorded *"Until business approval exists,
+> CarbonFlow has no formal RTO/RPO commitment"* and
+> `APPROVED RTO / RPO: NOT DEFINED`. Both described the position on 2026-09-30
+> and are retained here as the record of that date.
 
 ### Approved targets
 
+**As of 2026-10-01** (`docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`):
+
 ```text
-APPROVED RTO:  NOT DEFINED   (PENDING BUSINESS APPROVAL)
-APPROVED RPO:  NOT DEFINED   (PENDING BUSINESS APPROVAL)
+APPROVED RTO:           4 hours
+APPROVED RPO:           1 hour
+BACKUP FREQUENCY:       at least once every hour (database + evidence vault)
+RETENTION:              30 days (both stores)
+EVIDENCE VAULT:         same RTO/RPO and same recovery boundary as the database
+MONITORING:             automated, with alerting — NOT IMPLEMENTED
+RESTORE DRILL:          quarterly — cadence NOT SCHEDULED
+CLASSIFICATION:         PROJECT-LEVEL REQUIREMENT — NOT A CONTRACTUAL SLA
+APPROVAL:               APPROVED — COMPLETE, CarbonFlow Project Owner
+VALIDATION:             NOT YET TESTED — REQUIREMENT NOT DEMONSTRATED
 ```
 
+> **Historical record.** At the time of this validation exercise
+> (2026-09-30 14:18–14:33) the approved targets were `NOT DEFINED`. **Neither
+> value was invented then, and neither was derived from the drill
+> measurements.** They were supplied explicitly by the business owner on
+> 2026-10-01 — after this validation was recorded.
+
+### What this validation did and did not establish
+
+**Established:** the recovery *procedure* works — database and evidence-vault
+backup, destruction, restore, application restart, SHA-256 preservation and
+tenant-isolation verification.
+
+**NOT established:** compliance with the approved RTO or RPO. The drill ran on a
+synthetic 115 KB dataset over loopback with no scheduler, no monitoring and no
+HA. **RTO validation: NOT YET TESTED. RPO validation: NOT YET TESTED.**
+
 > **Terminology note.** Earlier sections of this document record
-> `FORMAL RTO: UNKNOWN`. `UNKNOWN` and `NOT DEFINED` mean the same thing here —
-> no approved target exists — but **`NOT DEFINED` is the canonical term**, and
-> `NOT DEFINED` is used for all new statements. The `UNKNOWN` wording above is
-> retained where it forms part of a dated historical record.
+> `FORMAL RTO: UNKNOWN`. `UNKNOWN` and `NOT DEFINED` both mean *no approved
+> target existed at that point in time*. Those `UNKNOWN` statements are
+> **historical, accurate for 2026-09-30, and retained unchanged** as part of the
+> dated record.
 
-**Neither value was invented.** A search of every Markdown file in the
-repository for `RTO`, `RPO`, `recovery time`, `recovery point`, `backup
-frequency`, `business continuity`, `disaster recovery`, `downtime`,
-`data loss`, `retention`, `SLA`, `uptime` and `availability` found **no
-numeric target of any kind**. The only existing statements acknowledge their
-absence:
+### Requirements that were undefined when this validation was performed
 
-| Source | Statement |
+The following search and its findings describe the repository as of
+2026-09-30. They are **historical and accurate for that date**; approval
+superseded them on 2026-10-01.
+
+At that time, a search of every Markdown file for `RTO`, `RPO`, `recovery time`,
+`recovery point`, `backup frequency`, `business continuity`, `disaster
+recovery`, `downtime`, `data loss`, `retention`, `SLA`, `uptime` and
+`availability` found **no numeric target of any kind**. The only existing
+statements acknowledged their absence:
+
+| Source | Statement (as of 2026-09-30) |
 | --- | --- |
 | `docs/BACKUP-RECOVERY.md` §6 | *"No rehearsal has been performed for this document. Until one is, the RTO of CarbonFlow is unknown."* |
 | `docs/BACKUP-RECOVERY.md` §3.1 | *"No retention policy is implemented in this repository — an operator must set one."* |
@@ -979,12 +1027,14 @@ absence:
 | `docs/RELEASE-HANDOVER.md` | *"No performance data exists. Do not assume service levels."* |
 
 **`Formal RTO: NOT DEFINED` · `Formal RPO: NOT DEFINED`** — replacing `UNKNOWN`
-with a guess would have been the wrong answer, so it was not done.
+with a guess would have been the wrong answer, so it was not done. This remains
+the correct record of 2026-09-30.
 
-No operational owner, approver, on-call rotation or escalation path is recorded
-anywhere in this repository either. Recovery objectives without a named
-accountable person are unenforceable, because nobody is required to notice when
-they are missed.
+**Superseded 2026-10-01:** targets were subsequently approved (RTO 4 hours,
+RPO 1 hour), together with an operational owner, on-call responsibility, an
+escalation path, a monitoring requirement and a quarterly drill cadence — all
+recorded in `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`. **Approval of the
+targets does not retrospectively validate them.**
 
 ### Observed figures
 
@@ -1099,44 +1149,57 @@ with no WAL archiving — and it is now **demonstrated** rather than assumed.
 ### Results against target
 
 ```text
-RTO RESULT:  NOT TESTED — no approved RTO exists to compare against
-RPO RESULT:  NOT TESTED — no approved RPO exists to compare against
-EVIDENCE RECOVERY: PASS
+RTO RESULT:  NOT YET TESTED — REQUIREMENT NOT DEMONSTRATED
+RPO RESULT:  NOT YET TESTED — REQUIREMENT NOT DEMONSTRATED
+EVIDENCE RECOVERY: PASS (procedure demonstrated)
 ```
 
-`RECOVERY REQUIREMENT NOT MET` is **not** recorded, because that judgement
-requires a target. No requirement has been defined, so none can be unmet.
+> **Historical record (2026-09-30).** This block originally read *"NOT TESTED —
+> no approved RTO exists to compare against"*, which was **accurate when
+> written**. Targets have since been approved (2026-10-01: RTO 4 h, RPO 1 h),
+> but this drill still cannot compare against them — it ran on a synthetic local
+> dataset over loopback with no scheduler, no monitoring and no HA.
+> `RECOVERY REQUIREMENT NOT MET` is still **not** recorded, because no
+> representative compliance test has been performed.
 
-### Requirements still to be decided
+### Requirements — current state
 
 Recorded in full in `docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md`:
 
 ```text
-RTO:                           NOT DEFINED
-RPO:                           NOT DEFINED
-Backup frequency:              NOT DEFINED
-Retention (database):          NOT DEFINED
-Retention (evidence vault):    NOT DEFINED
-Evidence recovery requirement: NOT DEFINED (YES / NO / SEPARATE REQUIREMENT)
+RTO:                            4 hours          (APPROVED 2026-10-01)
+RPO:                            1 hour           (APPROVED 2026-10-01)
+Backup frequency:               at least hourly  (database + vault)
+Retention (database):           30 days
+Retention (evidence vault):     30 days
+Evidence recovery requirement:  SAME REQUIREMENT as the database
+Monitoring:                     automated, with alerting
+Restore-drill frequency:        quarterly
 
-Approving authority:           NOT IDENTIFIED
-Approval date:                 NOT APPROVED
+Approving authority:            CarbonFlow Project Owner
+Approval date:                  2026-10-01
+Approval status:                APPROVED — COMPLETE
+Classification:                 PROJECT-LEVEL REQUIREMENT, NOT A CONTRACTUAL SLA
+
+Control implementation:         NOT IMPLEMENTED
+Compliance validation:          NOT YET TESTED
 ```
 
-### Capability that must exist before a tight target could be met
+### Capability required by the approved targets — current state
 
-Recorded so the cost is visible before a target is chosen:
+Recorded so the cost of the approved requirements is visible:
 
-| Capability | State | Needed for |
+| Capability | State | Required by |
 | --- | --- | --- |
-| Scheduled backup job | **NOT IMPLEMENTED** | Any RPO shorter than "when an operator remembers" |
-| WAL archiving / point-in-time recovery | **NOT IMPLEMENTED** | Any RPO measured in minutes |
+| Scheduled hourly backup job (DB + vault) | **NOT IMPLEMENTED** | Approved hourly backup frequency; 1-hour RPO |
+| WAL archiving / point-in-time recovery | **NOT IMPLEMENTED** | Not strictly required by an hourly RPO |
 | Offsite / cross-region replication | **NOT IMPLEMENTED** | Surviving loss of the primary host or region |
-| Retention enforcement | **NOT IMPLEMENTED** | Meeting any retention commitment |
-| Encryption at rest for backups | **NOT IMPLEMENTED** | Handling customer documents offsite |
-| Backup monitoring / alerting | **NOT IMPLEMENTED** (F-09) | **Detecting** a missed backup or an overdue recovery |
-| Backup verification automation | **NOT IMPLEMENTED** | Knowing a backup is restorable without trying it |
-| Named operations owner / on-call | **NOT IDENTIFIED** | Any of the above being acted upon |
+| Retention enforcement (30 days) | **NOT IMPLEMENTED** | Approved 30-day retention |
+| Encryption at rest for backups | **NOT IMPLEMENTED** | Holding confidential customer documents for the approved retention |
+| Backup monitoring / alerting | **NOT IMPLEMENTED** (F-09) | Approved monitoring requirement; **detecting** a missed backup or an overdue recovery |
+| Backup verification automation | **NOT IMPLEMENTED** | Approved alert when a backup "cannot be verified" |
+| Named operations owner / on-call | **APPROVED 2026-10-01** — CarbonFlow Operations; **tier-3 administrator NOT IDENTIFIED** | Approved on-call and escalation path |
+| Production HA / failover | **NOT IMPLEMENTED** | Any claim of demonstrated RTO under failover |
 
 Backup monitoring is a **prerequisite** for meeting an RTO, not a nice-to-have:
 without alerting, a missed backup is discovered only when a restore is needed.
@@ -1144,12 +1207,18 @@ without alerting, a missed backup is discovered only when a restore is needed.
 ### Verdict
 
 ```text
-RECOVERY REQUIREMENTS — PENDING BUSINESS APPROVAL
+RECOVERY PROCEDURE — DEMONSTRATED
+RECOVERY REQUIREMENTS — APPROVED 2026-10-01 (project-level, not an SLA)
+COMPLIANCE VALIDATION — NOT YET TESTED / REQUIREMENT NOT DEMONSTRATED
+CONTROLS — NOT IMPLEMENTED
 ```
 
-The recovery *procedure* is demonstrated and works. The recovery *requirements*
-do not exist. Both statements are true at once, and the second is the one that
-needs a human decision.
+> **Historical statement — accurate when written; superseded by the approved
+> project-level recovery requirements dated 2026-10-01.** This verdict
+> originally read *"RECOVERY REQUIREMENTS — PENDING BUSINESS APPROVAL … the
+> recovery requirements do not exist"*. That was correct on 2026-09-30.
+> Approval has since been supplied, and the recovery *procedure* remains
+> demonstrated. **Approving a target does not validate it.**
 
 ## Findings
 
@@ -1330,9 +1399,17 @@ correctly revokes the session.
 - **Still untested:** scheduled/automated backup, retention enforcement,
   encryption at rest, offsite replication, backup monitoring, and the literal
   `rsync` command (this host has no `rsync`; `robocopy` was used equivalently).
-- **Formal RTO and RPO remain `NOT DEFINED`** — pending business approval, and
-  this is now the **decisive remaining gap**, not untested recovery capability.
-  Browser coverage is also Chrome-only with no WCAG audit.
+- **Recovery requirements were approved on 2026-10-01** (RTO 4 hours, RPO 1
+  hour, hourly backups, 30-day retention, automated monitoring, quarterly
+  drill) as **project-level requirements, not contractual SLAs**. The 2026-09-30
+  clause *"Formal RTO and RPO remain `NOT DEFINED` — pending business approval"*
+  is **historical and accurate for that date**.
+- **None of the controls those requirements depend on is implemented** — no
+  backup scheduler, no retention enforcement, no monitoring, no encryption at
+  rest, no HA/failover — so **RTO and RPO compliance are NOT YET TESTED /
+  REQUIREMENT NOT DEMONSTRATED**, and the quarterly drill cadence is **NOT
+  SCHEDULED**. This, not untested recovery capability, is the decisive remaining
+  gap. Browser coverage is also Chrome-only with no WCAG audit.
 
 None of these blocks release. None is a security, accounting or data-integrity
 defect. B-01 is the one a customer would notice first. The recovery procedures
@@ -1341,15 +1418,18 @@ which is a materially stronger position than the release was in an hour ago.
 
 > **This verdict is deliberately NOT upgraded to `PASS` on the strength of the
 > recovery drills.** Recovery capability being demonstrated does not mean
-> recovery requirements are met — there are no approved requirements to meet.
-> The verdict remains:
+> recovery requirements are met. The verdict remains:
 >
 > ```text
 > OPERATIONAL VALIDATION — PARTIAL
 > ```
 >
-> Reason: *recovery procedure demonstrated successfully, but formal recovery
-> requirements are not yet approved.*
+> Reason: *recovery procedure demonstrated successfully; recovery requirements
+> approved 2026-10-01 but not yet implemented or validated.*
+>
+> **Approved target ≠ implemented control ≠ validated compliance.** The
+> approved RTO (4 hours) and RPO (1 hour) are **NOT YET TESTED** and every
+> required control is **NOT IMPLEMENTED**.
 >
 > Likewise this release is **not** `PRODUCTION READY`, **not** `RTO COMPLIANT`,
 > **not** `RPO COMPLIANT`, and **not** `FULL OPERATIONAL VALIDATION`.
