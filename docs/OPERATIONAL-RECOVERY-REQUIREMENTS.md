@@ -904,6 +904,7 @@ date, or describe the 2026-09-30 validation window as it stood.
 | `docs/FINAL-RELEASE-REPORT.md` | Release record; carries the same warning |
 | `docs/DEPLOYMENT-SECURITY.md` | DB TLS, secrets, CORS for a restored deployment |
 | `docs/PHASE10.6-PRODUCTION-READINESS.md` | Finding F-09 (no backup monitoring), F-06 (vault default path unsuitable for production) |
+| `docs/RECOVERY-CONTROLS-DESIGN.md` | **Design and implementation plan** for the controls these requirements imply; **DESIGN ONLY — no control implemented** |
 
 ---
 
