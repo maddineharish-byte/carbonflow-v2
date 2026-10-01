@@ -985,6 +985,80 @@ A control may be called **VALIDATED against a requirement** only when:
 
 ---
 
-**Document status: `DESIGN — PENDING REVIEW`. No control implemented.**
+**Document status: `DESIGN — PENDING REVIEW`. REC-02 implemented; REC-03..REC-13 not implemented.**
 **Release state: `RELEASE CANDIDATE — FROZEN` (`d42af8b`).**
 **No compliance with the approved RTO/RPO is claimed.**
+
+---
+
+## 25. REC-02 implementation status
+
+> **REC-02 STATUS: IMPLEMENTED**
+>
+> The manifest described in §8 now exists as code. **No other REC task is
+> implemented.** Backup scheduling, vault copying, verification, retention,
+> monitoring, encryption, and the RTO/RPO tests remain NOT IMPLEMENTED.
+
+### Recovery manifest as built
+
+| Property | Implementation |
+| --- | --- |
+| **Format** | JSON, indented, UTF-8. Version field `manifestVersion` = `"1"`, independent of the application version |
+| **Location** | `<backupSetDir>/manifest.json` — a plain file **outside PostgreSQL**, so it survives the failure it describes |
+| **Package** | `com.carbonflow.recovery` (5 classes). **No Spring annotations**, so component scanning never instantiates it and the request path has no dependency on it |
+| **backupSetId** | Random **UUIDv4**. A timestamp-derived id would collide for two runs inside the same hour — the exact approved interval |
+| **Recovery boundary** | `recoveryBoundaryAt`, an `Instant` supplied by the coordinator. This layer **records** the earlier-of-T1/T2 rule and never re-derives it from its own clock |
+| **Verification lifecycle** | `PENDING` / `VERIFIED` / `FAILED` / `UNVERIFIABLE`. REC-02 can produce **only** `PENDING`; there is deliberately no builder overload accepting a status, so a caller cannot assert a result it did not produce |
+| **Checksum handling** | SHA-256 metadata is **recorded**, never computed here. `SHA-256` is the only accepted algorithm string |
+| **Schema/Flyway identity** | `flywayVersions` + `flywayAllSuccessful` + `expectedTableCount`, **supplied** by the caller from `flyway_schema_history`. This layer never queries PostgreSQL |
+| **Time** | `Instant`, UTC ISO-8601 with trailing `Z`. No zone, locale or geography is stored or assumed |
+| **Git identity** | Optional `gitCommit` with an explicit `gitCommitKnown` flag. Absent metadata is recorded as absent — never fabricated, never fatal |
+| **Tests** | 34 focused unit tests, no PostgreSQL required |
+
+### Deviations from the §8 sketch, and why
+
+1. **Flat records with nested value records** instead of the sketch's mix of
+   snake_case names and arrays. `RecoveryManifest` is now a single record with
+   five nested records, each validating itself in its compact constructor, so an
+   invalid `Database` cannot be constructed at all.
+2. **`createdAt` is injected via `Clock`.** Production passes `Clock.systemUTC()`;
+   tests pass a fixed clock. Timestamps in the manifest are therefore
+   reproducible without any timezone-dependent machine configuration.
+3. **Strict ISO-8601 deserialisation.** Jackson's stock `Instant` handling accepts
+   a bare epoch number (`1750000000`), which is ambiguous between seconds and
+   milliseconds. A recovery boundary cannot afford two readings, so
+   `StrictInstantDeserializer` accepts quoted ISO-8601 only, and requires an
+   explicit offset or `Z`.
+4. **Atomic finalisation via temp file + `ATOMIC_MOVE`**, with a documented
+   fallback where the filesystem cannot move atomically. This is described as
+   **completeness signalling**, not immutability — no cryptographic guarantee is
+   claimed or implied.
+5. **Globals capture and vault integrity index are mandatory, not optional.**
+   Roles live outside the database dump but are read at runtime
+   (`docs/BACKUP-RECOVERY.md` §2.2), and the vault carries the same RTO/RPO as
+   the database. A set missing either cannot be restored into a usable state, so
+   the type system refuses to describe one.
+
+### Security controls implemented
+
+- **No credential-named field is representable.** `RecoverySetGuard.requireNonSecretName`
+  rejects `password`, `secret`, `token`, `jwt`, `credential`, `passphrase`,
+  `apikey`, `privatekey`, `authorization`, `bearer`, `cookie` and similar.
+- **No traversal.** Every path field is validated set-relative: `../../secret`,
+  `/etc/shadow`, `C:\...`, `~/.ssh`, `./x` and Windows-separator traversal are all
+  rejected, with a final `normalize()`-plus-containment check as backstop.
+- **No host leakage.** Paths are relative to the set, so a set moved between
+  hosts stays valid and the original host layout is not disclosed.
+- **No secrets in exceptions.** Validation errors name the *field*, never the
+  value.
+
+### What REC-02 deliberately does NOT do
+
+No `pg_dump`, no vault copy, no `rsync`/`robocopy`, no scheduling, no retention,
+no monitoring, no alerting, no encryption, no WAL/PITR, no HA, no RTO/RPO test,
+no drill, no schema change, no Flyway V9, no REST endpoint.
+
+### Next
+
+**REC-03 — Database backup automation.** It produces the `Database` metadata
+(this manifest already accepts it) and invokes nothing from REC-04 onward.
