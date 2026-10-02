@@ -487,25 +487,11 @@ public final class PostgreSqlBackupService {
     /**
      * Streams the file through SHA-256.
      *
-     * <p>Streaming rather than {@code Files.readAllBytes}: a backup may be
-     * gigabytes, and loading one into heap to hash it would be a second outage
-     * waiting to happen.
+     * <p>Delegates to {@link com.carbonflow.recovery.RecoveryDigest} so the whole
+     * recovery package shares one hashing implementation.
      */
     static String sha256(Path file) throws IOException {
-        MessageDigest digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IOException("SHA-256 unavailable in this JVM", e);
-        }
-        try (InputStream in = Files.newInputStream(file);
-             DigestInputStream digestStream = new DigestInputStream(in, digest)) {
-            byte[] buffer = new byte[64 * 1024];
-            while (digestStream.read(buffer) != -1) {
-                // reading is the hashing
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
+        return com.carbonflow.recovery.RecoveryDigest.sha256(file);
     }
 
     /**
