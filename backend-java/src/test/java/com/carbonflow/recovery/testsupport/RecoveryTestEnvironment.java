@@ -1,11 +1,10 @@
-package com.carbonflow.recovery.drill;
+package com.carbonflow.recovery.testsupport;
 
 import com.carbonflow.recovery.postgres.PostgreSqlBackupTarget;
 import com.carbonflow.recovery.postgres.PostgreSqlToolLocator;
 import com.carbonflow.recovery.exec.SafeProcessRunner;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -19,30 +18,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shared host discovery for the drill tests.
+ * Host discovery shared by the recovery drill and validation tests.
  *
- * <p>Kept in one place because both drill tests need the same three things: the
+ * <p>Discovery lives here because three suites need the same answers: the
  * PostgreSQL client tools, a server whose major version matches the local
- * {@code pg_dump}, and a throwaway GnuPG keyring. Duplicating that discovery
- * would let the two tests disagree about what counts as a usable environment.
+ * {@code pg_dump}, and the tool environment. Each re-deriving that would let the
+ * suites disagree about what counts as a usable environment.
  *
  * <p>Credentials are read from the process environment or a local {@code .env}
- * at <b>runtime</b>. Nothing here is written to a fixture, a log line, or the
- * repository, and no credential ever appears in a failure message.
+ * at <b>runtime</b> only. No credential is written to a fixture, a log line, or
+ * the repository, and none appears in a failure message.
  */
-final class ServerProbe {
+public final class RecoveryTestEnvironment {
 
     private static Boolean tooling;
     private static PostgreSqlBackupTarget matched;
-    private static Path gpgPath;
-    private static String keyId;
-    private static String home;
 
-    private ServerProbe() {
+    private RecoveryTestEnvironment() {
     }
 
-    /** All three client tools resolvable. */
-    static synchronized boolean tooling() {
+    /** True when {@code pg_dump}, {@code pg_dumpall} and {@code pg_restore} resolve. */
+    public static synchronized boolean toolingAvailable() {
         if (tooling == null) {
             tooling = findTool("pg_dump") != null && findTool("pg_dumpall") != null
                     && findTool("pg_restore") != null;
@@ -51,17 +47,55 @@ final class ServerProbe {
         return tooling;
     }
 
-    /** A server whose major version matches the local pg_dump, or {@code null}. */
-    static synchronized PostgreSqlBackupTarget matchingServer() {
-        tooling();
+    /** True when tooling and a version-matched server are both available. */
+    public static boolean ready() {
+        return toolingAvailable() && matchingServer() != null;
+    }
+
+    /** A server whose major version matches {@code pg_dump}, or {@code null}. */
+    public static synchronized PostgreSqlBackupTarget matchingServer() {
+        toolingAvailable();
         return matched;
     }
 
-    // ------------------------------------------------------------------
-    // tool discovery
+    public static PostgreSqlBackupTarget targetFor(String database) {
+        PostgreSqlBackupTarget server = matchingServer();
+        return new PostgreSqlBackupTarget(server.host(), server.port(), database,
+                server.username(), server.password(), server.sslMode());
+    }
+
+    public static Connection connect(PostgreSqlBackupTarget target, String database)
+            throws Exception {
+        return DriverManager.getConnection(
+                "jdbc:postgresql://" + target.host() + ":" + target.port() + "/" + database,
+                target.username(), new String(target.password()));
+    }
+
+    public static void dropDatabase(String name) {
+        PostgreSqlBackupTarget server = matchingServer();
+        if (server == null) {
+            return;
+        }
+        try (Connection connection = connect(server, "postgres");
+             Statement statement = connection.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS \"" + name + "\"");
+        } catch (Exception ignored) {
+            // best-effort cleanup
+        }
+    }
+
+    /** Process environment with every PostgreSQL tool path pinned. */
+    public static Map<String, String> toolEnvironment() {
+        Map<String, String> env = new HashMap<>(System.getenv());
+        env.put(PostgreSqlToolLocator.ENV_PG_DUMP, findTool("pg_dump").toString());
+        env.put(PostgreSqlToolLocator.ENV_PG_DUMPALL, findTool("pg_dumpall").toString());
+        env.put(PostgreSqlToolLocator.ENV_PG_RESTORE, findTool("pg_restore").toString());
+        return env;
+    }
+
     // ------------------------------------------------------------------
 
-    static Path findTool(String name) {
+    public static Path findTool(String name) {
         String envVariable = switch (name) {
             case "pg_dump" -> PostgreSqlToolLocator.ENV_PG_DUMP;
             case "pg_dumpall" -> PostgreSqlToolLocator.ENV_PG_DUMPALL;
@@ -94,20 +128,8 @@ final class ServerProbe {
         return null;
     }
 
-    static synchronized Map<String, String> toolEnvironment() {
-        Map<String, String> env = new HashMap<>(System.getenv());
-        env.put(PostgreSqlToolLocator.ENV_PG_DUMP, findTool("pg_dump").toString());
-        env.put(PostgreSqlToolLocator.ENV_PG_DUMPALL, findTool("pg_dumpall").toString());
-        env.put(PostgreSqlToolLocator.ENV_PG_RESTORE, findTool("pg_restore").toString());
-        return env;
-    }
-
-    // ------------------------------------------------------------------
-    // server discovery
-    // ------------------------------------------------------------------
-
     /**
-     * Finds a server whose major version matches {@code pg_dump}.
+     * A server whose major version matches {@code pg_dump}.
      *
      * <p>A dump written by a newer {@code pg_dump} cannot be restored onto an
      * older server: PostgreSQL 18 emits {@code SET transaction_timeout = 0},
@@ -164,94 +186,6 @@ final class ServerProbe {
         return Integer.parseInt(hostPort.substring(hostPort.indexOf(':') + 1));
     }
 
-    static Connection connect(PostgreSqlBackupTarget target, String database)
-            throws Exception {
-        return DriverManager.getConnection(
-                "jdbc:postgresql://" + target.host() + ":" + target.port() + "/" + database,
-                target.username(), new String(target.password()));
-    }
-
-    static void dropDatabase(String name) {
-        PostgreSqlBackupTarget target = matched;
-        if (target == null) {
-            return;
-        }
-        try (Connection connection = connect(target, "postgres");
-             Statement statement = connection.createStatement()) {
-            statement.execute("DROP DATABASE IF EXISTS \"" + name + "\"");
-        } catch (Exception ignored) {
-            // best-effort cleanup
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // gpg
-    // ------------------------------------------------------------------
-
-    /** A throwaway key pair, generated once per run; {@code null} if unavailable. */
-    static synchronized String encryptionKeyId(Path gpg) {
-        if (gpgPath == null) {
-            gpgPath = findTool("gpg");
-        }
-        if (gpgPath == null) {
-            return null;
-        }
-        if (keyId != null || home != null) {
-            return keyId;
-        }
-        try {
-            Path homeDir = Files.createTempDirectory("carbonflow-drill-gnupg");
-            home = toPosix(homeDir.toString());
-
-            SafeProcessRunner.Result keygen = SafeProcessRunner.run(
-                    new SafeProcessRunner.Command(gpgPath.toString())
-                            .arg("--batch").arg("--homedir").arg(home)
-                            .arg("--passphrase").arg("")
-                            .arg("--quick-generate-key")
-                            .arg("carbonflow-drill@invalid")
-                            .arg("ed25519").arg("sign").arg("never")
-                            .timeout(Duration.ofMinutes(2)));
-            if (!keygen.succeeded()) {
-                return null;
-            }
-
-            SafeProcessRunner.Result list = SafeProcessRunner.run(
-                    new SafeProcessRunner.Command(gpgPath.toString())
-                            .arg("--batch").arg("--homedir").arg(home)
-                            .arg("--with-colons").arg("--fingerprint")
-                            .timeout(Duration.ofMinutes(1)));
-            String fingerprint = null;
-            for (String line : list.stdout().split("\n")) {
-                String[] parts = line.split(":");
-                if (parts.length > 9 && "fpr".equals(parts[0])) {
-                    fingerprint = parts[9];
-                    break;
-                }
-            }
-            if (fingerprint == null) {
-                return null;
-            }
-            // ed25519 cannot encrypt; add an RSA encryption subkey.
-            SafeProcessRunner.Result subkey = SafeProcessRunner.run(
-                    new SafeProcessRunner.Command(gpgPath.toString())
-                            .arg("--batch").arg("--yes").arg("--homedir").arg(home)
-                            .arg("--passphrase").arg("")
-                            .arg("--quick-add-key").arg(fingerprint)
-                            .arg("rsa2048").arg("encr").arg("never")
-                            .timeout(Duration.ofMinutes(2)));
-            keyId = subkey.succeeded() ? fingerprint : null;
-            return keyId;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    static synchronized String gpgHome() {
-        return home;
-    }
-
-    // ------------------------------------------------------------------
-
     private static Integer majorVersion(Path tool) {
         if (tool == null) {
             return null;
@@ -269,7 +203,7 @@ final class ServerProbe {
     }
 
     /** Git's bundled gpg needs a POSIX-style home directory path. */
-    static String toPosix(String windowsPath) {
+    public static String toPosix(String windowsPath) {
         String value = windowsPath.replace('\\', '/');
         if (value.length() > 2 && value.charAt(1) == ':') {
             return "/" + Character.toLowerCase(value.charAt(0)) + value.substring(2);
@@ -277,10 +211,7 @@ final class ServerProbe {
         return value;
     }
 
-    /**
-     * Reads {@code DB_*} from the environment, falling back to a local
-     * {@code .env}. Values are used at runtime only.
-     */
+    /** Reads {@code DB_*} from the environment, falling back to a local .env. */
     private static Map<String, String> readDotEnv() {
         Map<String, String> values = new HashMap<>();
         for (String key : List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER",
@@ -313,10 +244,5 @@ final class ServerProbe {
             }
         }
         return values;
-    }
-
-    @SuppressWarnings("unused")
-    private static Class<?> charsetGuard() {
-        return StandardCharsets.class;
     }
 }

@@ -40,12 +40,12 @@ class RecoveryDrillEndToEndTest {
 
     @BeforeAll
     static void detect() {
-        server = ServerProbe.matchingServer();
-        gpg = ServerProbe.findTool("gpg");
+        server = com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.matchingServer();
+        gpg = com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.findTool("gpg");
     }
 
     static boolean toolingPresent() {
-        return ServerProbe.tooling() && server != null;
+        return com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.ready();
     }
 
     @Test
@@ -66,7 +66,7 @@ class RecoveryDrillEndToEndTest {
         try {
             createSourceDatabase(source, digest, evidenceFile.toString(), content.length());
 
-            Map<String, String> env = ServerProbe.toolEnvironment();
+            Map<String, String> env = com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.toolEnvironment();
             var coordinator = new RecoverySetCoordinator(
                     com.carbonflow.recovery.postgres.PostgreSqlBackupService
                             .productionDefaults(),
@@ -93,12 +93,12 @@ class RecoveryDrillEndToEndTest {
 
             // REC-09 in the loop: encrypt the set, then drill the decrypted copy.
             // This proves encryption does not damage restorability.
-            String keyId = ServerProbe.encryptionKeyId(gpg);
+            String keyId = com.carbonflow.recovery.testsupport.RecoveryTestGpg.encryptionKeyId(gpg);
             if (keyId != null) {
                 BackupEncryptionService crypto =
                         new BackupEncryptionService(
                                 BackupEncryptionService.Method.GPG, gpg,
-                                Map.of("GNUPGHOME", ServerProbe.gpgHome()));
+                                Map.of("GNUPGHOME", com.carbonflow.recovery.testsupport.RecoveryTestGpg.home()));
                 var dbMeta = crypto.encrypt(
                         backup.setDirectory().resolve("database.dump"), keyId);
                 assertThat(dbMeta).isNotNull();
@@ -149,8 +149,8 @@ class RecoveryDrillEndToEndTest {
             System.out.println("MEASURED total recovery duration: "
                     + result.durations().totalRecovery().toSeconds() + "s");
         } finally {
-            ServerProbe.dropDatabase(recovery);
-            ServerProbe.dropDatabase(source);
+            com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.dropDatabase(recovery);
+            com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.dropDatabase(source);
         }
     }
 

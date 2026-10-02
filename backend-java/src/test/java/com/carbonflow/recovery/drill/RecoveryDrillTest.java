@@ -47,8 +47,8 @@ class RecoveryDrillTest {
 
     @BeforeAll
     static void detect() {
-        toolingAvailable = ServerProbe.tooling();
-        localServer = ServerProbe.matchingServer();
+        toolingAvailable = com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.toolingAvailable();
+        localServer = com.carbonflow.recovery.testsupport.RecoveryTestEnvironment.matchingServer();
     }
 
     /**
@@ -506,6 +506,17 @@ class RecoveryDrillTest {
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    /**
+ * The version-matched server, for sibling validation tests to reuse.
+ *
+ * <p>Discovery lives here because the drill is the component that needs a
+ * matching major version; REC-11 and REC-12 share it rather than each
+ * re-deriving the requirement.
+ */
+    static PostgreSqlBackupTarget probeServer() {
+        return localServer;
     }
 
     /** Used by {@code @EnabledIf}: needs tooling plus a version-matched server. */
