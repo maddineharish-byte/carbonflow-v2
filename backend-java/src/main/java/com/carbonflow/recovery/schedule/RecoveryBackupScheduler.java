@@ -54,6 +54,16 @@ public final class RecoveryBackupScheduler {
     private final RecoveryScheduleConfig config;
     private final Clock clock;
 
+    /**
+     * Optional notifier (REC-14).
+     *
+     * <p>Optional so the scheduler has no hard dependency on notification
+     * infrastructure: a broken or absent channel must never stop a backup. When
+     * present, every cycle outcome is raised as an operator notification.
+     */
+    private final java.util.function.Consumer<
+            com.carbonflow.recovery.notify.RecoveryNotification> notifier;
+
     /** Single-instance guard. See the class note on its limits. */
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicReference<Outcome> lastOutcome = new AtomicReference<>();
@@ -111,12 +121,25 @@ public final class RecoveryBackupScheduler {
                                    RecoveryCycleDependencies.RetentionSweeper retention,
                                    RecoveryScheduleConfig config,
                                    Clock clock) {
+        this(backupPerformer, verifier, monitor, retention, config, clock, null);
+    }
+
+    public RecoveryBackupScheduler(RecoveryCycleDependencies.BackupPerformer backupPerformer,
+                                   RecoveryCycleDependencies.SetVerifier verifier,
+                                   RecoveryCycleDependencies.HealthReporter monitor,
+                                   RecoveryCycleDependencies.RetentionSweeper retention,
+                                   RecoveryScheduleConfig config,
+                                   Clock clock,
+                                   java.util.function.Consumer<
+                                           com.carbonflow.recovery.notify.RecoveryNotification>
+                                           notifier) {
         this.backupPerformer = backupPerformer;
         this.verifier = verifier;
         this.monitor = monitor;
         this.retention = retention;
         this.config = config;
         this.clock = clock;
+        this.notifier = notifier;
     }
 
     /**
@@ -153,6 +176,8 @@ public final class RecoveryBackupScheduler {
                 // Fail closed: never record a failed backup as successful.
                 monitor.recordRunFinished(false, backup.backupSetId(),
                         backup.failureReason());
+                raise(Outcome.Status.FAILED, backup.backupSetId(),
+                        backup.failureReason(), elapsed);
                 log.error("Scheduled recovery backup FAILED after {}s: {}",
                         elapsed.toSeconds(), backup.failureReason());
                 return record(new Outcome(Outcome.Status.FAILED, backup.backupSetId(),
@@ -171,6 +196,8 @@ public final class RecoveryBackupScheduler {
                     verification.isVerified() ? null : verification.summary());
 
             if (!verification.isVerified()) {
+                raise(Outcome.Status.VERIFICATION_FAILED, backup.backupSetId(),
+                        verification.summary(), elapsed);
                 log.error("Scheduled recovery backup {} completed but verification "
                                 + "returned {}: {}", backup.backupSetId(),
                         verification.status(), verification.findings());
@@ -189,6 +216,42 @@ public final class RecoveryBackupScheduler {
 
         } finally {
             running.set(false);
+        }
+    }
+
+    /**
+     * Raises an operator notification for a failed cycle, if a notifier is wired.
+     *
+     * <p>A notification failure is swallowed here: the caller is the backup
+     * scheduler, and a broken notification channel must never abort a backup or
+     * turn a successful one into a failure.
+     */
+    private void raise(Outcome.Status status, String backupSetId, String detail,
+                       Duration elapsed) {
+        if (notifier == null) {
+            return;
+        }
+        try {
+            com.carbonflow.recovery.notify.RecoveryNotification.Event event =
+                    status == Outcome.Status.VERIFICATION_FAILED
+                            ? com.carbonflow.recovery.notify.RecoveryNotification.Event
+                                    .VERIFICATION_FAILED
+                            : com.carbonflow.recovery.notify.RecoveryNotification.Event
+                                    .BACKUP_FAILED;
+            notifier.accept(new com.carbonflow.recovery.notify.RecoveryNotification(
+                    com.carbonflow.recovery.notify.RecoveryNotification.Severity.CRITICAL,
+                    com.carbonflow.recovery.notify.RecoveryNotification.Control
+                            .RECOVERY_BACKUP,
+                    event,
+                    detail == null ? status.name() : detail,
+                    backupSetId,
+                    clock.instant(),
+                    com.carbonflow.recovery.notify.RecoveryNotification.token(status.name()),
+                    "Inspect the scheduled backup logs, correct the cause, then rerun "
+                            + "the backup and confirm the new set verifies."));
+        } catch (RuntimeException e) {
+            log.error("Failed to raise recovery notification (backup outcome "
+                    + "unaffected): {}", e.getMessage());
         }
     }
 

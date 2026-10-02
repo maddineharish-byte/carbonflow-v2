@@ -3,12 +3,16 @@ package com.carbonflow.recovery.schedule;
 import com.carbonflow.recovery.RecoveryManifestWriter;
 import com.carbonflow.recovery.coordination.RecoverySetCoordinator;
 import com.carbonflow.recovery.monitor.BackupMonitor;
+import com.carbonflow.recovery.notify.LoggingNotificationProvider;
+import com.carbonflow.recovery.notify.RecoveryNotification;
+import com.carbonflow.recovery.notify.RecoveryNotificationService;
 import com.carbonflow.recovery.postgres.PostgreSqlBackupService;
 import com.carbonflow.recovery.retention.RetentionService;
 import com.carbonflow.recovery.vault.EvidenceVaultBackupService;
 import com.carbonflow.recovery.verify.BackupVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +22,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -112,12 +117,33 @@ public class RecoverySchedulerConfiguration {
     }
 
     @Bean
+    public RecoveryNotificationService recoveryNotificationService() {
+        // Provider-neutral. The shipped provider writes a structured notification
+        // to the application log; it does NOT reach a human, and
+        // hasOutOfBandDelivery() reports false so no status can imply otherwise.
+        return new RecoveryNotificationService(
+                List.of(new LoggingNotificationProvider()), Clock.systemUTC(),
+                RecoveryNotification.defaultRepeatInterval());
+    }
+
+    @Bean
     public RecoveryBackupScheduler recoveryBackupScheduler(
             RecoverySetCoordinator coordinator,
             BackupVerifier verifier,
             BackupMonitor monitor,
             RetentionService retention,
-            RecoveryScheduleConfig config) {
+            RecoveryScheduleConfig config,
+            ObjectProvider<RecoveryNotificationService> notifications) {
+        RecoveryNotificationService notifier = notifications.getIfAvailable();
+        if (notifier != null) {
+            log.info("Recovery notifications enabled with provider(s) {} "
+                            + "(out-of-band delivery to a human: {})",
+                    notifier.providerNames(), notifier.hasOutOfBandDelivery());
+        } else {
+            log.warn("Recovery notifications are not configured; backup failures "
+                    + "will be logged only");
+        }
+
         // The real production classes are adapted to the scheduler's narrow
         // contracts. The coordinator is invoked with the no-op quiesce guard, which
         // is recorded honestly in the manifest: writes are not being blocked
@@ -145,6 +171,8 @@ public class RecoverySchedulerConfiguration {
                 },
                 retention::apply,
                 config,
-                Clock.systemUTC());
+                Clock.systemUTC(),
+                notifier == null ? null
+                        : notification -> notifier.notify(notification));
     }
 }
