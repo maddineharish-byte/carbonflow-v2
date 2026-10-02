@@ -1,5 +1,6 @@
 package com.carbonflow.recovery.retention;
 
+import com.carbonflow.recovery.RecoverySetNaming;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -207,21 +208,11 @@ public final class RetentionService {
     /**
      * A recovery-set directory is named with the UUIDv4 created by REC-03.
      *
-     * <p>Requiring the exact UUID form means a directory a human created, or a
-     * neighbouring project that happens to share the parent, is skipped rather
-     * than deleted.
+     * <p>Delegates to {@link RecoverySetNaming} so retention and monitoring can
+     * never disagree about which directory is a set.
      */
     static boolean isBackupSetDirectory(Path directory) {
-        String name = directory.getFileName().toString();
-        try {
-            UUID parsed = UUID.fromString(name);
-            // UUID.fromString is lenient about short groups; re-render and
-            // compare so only the canonical 8-4-4-4-12 form is accepted.
-            return parsed.toString().equalsIgnoreCase(name)
-                    && name.length() == 36;
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
+        return RecoverySetNaming.isBackupSetDirectory(directory);
     }
 
     /** Creation instant from the set manifest, or {@code null} if unreadable. */
