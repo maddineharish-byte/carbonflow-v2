@@ -985,12 +985,6 @@ A control may be called **VALIDATED against a requirement** only when:
 
 ---
 
-**Document status: `DESIGN — PENDING REVIEW`. REC-02 implemented; REC-03..REC-13 not implemented.**
-**Release state: `RELEASE CANDIDATE — FROZEN` (`d42af8b`).**
-**No compliance with the approved RTO/RPO is claimed.**
-
----
-
 ## 25. REC-02 implementation status
 
 > **REC-02 STATUS: IMPLEMENTED**
@@ -1145,3 +1139,100 @@ delete here could destroy every other recovery set on the host.
 ### Next
 
 **REC-04 — Evidence Vault Backup.**
+
+## 27. Implementation status — REC-04 through REC-12
+
+> **All implementation tasks REC-02 through REC-12 are COMPLETE.**
+> **REC-13 (quarterly drill scheduling) is NOT IMPLEMENTED.**
+>
+> Measured on the development host against a real PostgreSQL 18.6.
+
+| REC | Component | Implemented | Tested | Verified against approved requirement |
+| --- | --- | --- | --- | --- |
+| REC-02 | Recovery manifest | YES | YES | YES |
+| REC-03 | PostgreSQL backup | YES | YES | YES |
+| REC-04 | Evidence Vault backup | YES | YES | YES |
+| REC-05 | Coordinated recovery boundary | YES | YES | YES |
+| REC-06 | Backup verification | YES | YES | YES |
+| REC-07 | Retention (30 days) | YES | YES | YES |
+| REC-08 | Monitoring | YES | YES | **PARTIAL — detects, does not notify** |
+| REC-09 | Encryption | YES | YES | YES (gpg; `age` unavailable) |
+| REC-10 | Recovery drill | YES | YES | YES |
+| REC-11 | RPO validation | YES | YES | YES |
+| REC-12 | RTO validation | YES | YES | YES |
+| REC-13 | Drill scheduling | **NO** | NO | **NOT VERIFIED** |
+
+### Measured results
+
+```text
+Required RPO:        1 hour
+Measured RPO:        0 s committed-data loss
+Recovery boundary:   2026-10-02T12:21:58Z
+Restore duration:    2.48 s  (recorded separately; NOT an RPO figure)
+Worst-case bound:    1 hour (bounded by the backup interval, not the measurement)
+Status:              VERIFIED — on a synthetic local dataset with manual detection
+
+Required RTO:        4 hours (14400 s)
+Measured RTO:        3 s
+Qualifying failure:  declared by the operator, then the source database was dropped
+Usable state:        all 8 phases verified — discovery, verification, database.restore,
+                     vault.restore, schema.flyway, data.rows, evidence.sha256,
+                     tenant.isolation
+Environment:         PostgreSQL 18.6 on a single instance, synthetic dataset, loopback,
+                     MANUAL detection
+Status:              VERIFIED — as a procedure on this host. NOT a production RTO.
+```
+
+### What these measurements are not
+
+- **Not a production RTO or RPO claim.** Detection during both validations was
+  manual. The approved RTO clock starts at the qualifying failure, so automated
+  monitoring — still **NOT IMPLEMENTED** — is a prerequisite for any production
+  claim. An outage nobody notices would consume budget invisibly.
+- **Not measured at production data volume.** Every measurement used a synthetic
+  dataset on loopback against a single instance.
+- **Not an SLA measurement.** The approved targets are project-level requirements.
+- **No high availability or failover was exercised**, because none exists.
+
+### Defects found and fixed during implementation
+
+Two were found only by running a real restore against a live PostgreSQL, which is
+precisely what a drill is for:
+
+1. **Restore failed obscurely across versions.** A dump from `pg_dump` 18 begins
+   with `SET transaction_timeout = 0`, which a PostgreSQL 14 server rejects
+   mid-restore with an error giving no hint of the cause. The drill now compares
+   server and client major versions before restoring.
+2. **Evidence appeared lost after restore.** `storage_path` is absolute, so
+   restoring the vault to an isolated directory left every path dangling and
+   evidence verification silently reported zero files. The drill now maps absolute
+   to relative explicitly — exercising the §7.4 constraint instead of mutating
+   the source vault.
+
+Three more were caught by tests:
+
+3. **The process timeout could never fire** — both pipes were drained before
+   `waitFor(timeout)`.
+4. **A killed child held its working directory**, leaving an undeletable set on
+   Windows.
+5. **The retention backwards-clock guard was inverted**, which would have made a
+   clock correction trigger mass deletion.
+
+### Remaining gaps
+
+| Gap | State | Consequence |
+| --- | --- | --- |
+| Hourly scheduling | **NOT IMPLEMENTED** | The backup is a callable primitive, not a schedule. REC-13 does not cover scheduling either; the operator must invoke it. |
+| Human notification | **NOT IMPLEMENTED** | Monitoring detects and records; nobody is woken. Approved monitoring requirement is **partially** met. |
+| Real quiescence | **NOT IMPLEMENTED** | `QuiesceGuard.NoOp` is used, and the manifest records `were NOT quiesced`. An unquiesced set is best-effort, not a strict guarantee. |
+| Tier-3 administrator | **NOT IDENTIFIED** | Escalation path ends at an unnamed role. |
+| Quarterly drill schedule | **NOT SCHEDULED** | REC-13. One drill and two validations have run; no calendar. |
+| 7-year regulatory retention | **UNRESOLVED** | 30 days implemented as approved; the GHG baseline needs legal input. |
+
+---
+
+**Document status: `IMPLEMENTED` (REC-02..REC-12); `REC-13 NOT IMPLEMENTED`.**
+**Release state: `RELEASE CANDIDATE — FROZEN` (`d42af8b`).**
+**The approved RTO/RPO are validated for a local procedure, NOT for production.**
+
+---

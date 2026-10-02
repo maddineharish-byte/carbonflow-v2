@@ -904,12 +904,35 @@ date, or describe the 2026-09-30 validation window as it stood.
 | `docs/FINAL-RELEASE-REPORT.md` | Release record; carries the same warning |
 | `docs/DEPLOYMENT-SECURITY.md` | DB TLS, secrets, CORS for a restored deployment |
 | `docs/PHASE10.6-PRODUCTION-READINESS.md` | Finding F-09 (no backup monitoring), F-06 (vault default path unsuitable for production) |
-| `docs/RECOVERY-CONTROLS-DESIGN.md` | **Design and implementation plan** for the controls these requirements imply; **DESIGN ONLY — no control implemented** |
+| `docs/RECOVERY-CONTROLS-DESIGN.md` | **Design and implementation status** for the controls these requirements imply. REC-02..REC-12 implemented and locally validated; REC-13 (drill scheduling) NOT IMPLEMENTED |
 
 ---
 
 **Document status: `APPROVED` (business requirements, 2026-10-01).**
-**Control implementation status: `NOT IMPLEMENTED`.**
-**Compliance validation status: `NOT YET TESTED`.**
+**Control implementation status: `IMPLEMENTED` (REC-02..REC-12); REC-13 NOT IMPLEMENTED.**
+**Validation status: locally validated for a recovery PROCEDURE — see the measured
+results and the gaps in `docs/RECOVERY-CONTROLS-DESIGN.md` §27.**
 **Release state: `RELEASE CANDIDATE — FROZEN` (baseline `d42af8b`).**
-**No engineering work is authorised or implied by this document.**
+
+> ### Implementation update — Phase 10.7.2
+>
+> The controls this document requires were implemented after approval, on
+> 2026-10-02, in documentation-and-code commits that do not alter the frozen
+> release. Status against each approved requirement:
+>
+> ```text
+> RTO 4 hours                IMPLEMENTED + locally validated (3 s measured)
+> RPO 1 hour                 IMPLEMENTED + locally validated (0 s committed loss)
+> Backup frequency hourly    CONTROL IMPLEMENTED — SCHEDULER NOT IMPLEMENTED
+> Retention 30 days          CONTROL IMPLEMENTED
+> Recovery boundary          IMPLEMENTED (coordinated, not atomic; quiesce is a no-op)
+> Backup monitoring          PARTIAL — detects and records; NO human notification
+> Restore drill quarterly    DRILL IMPLEMENTED; SCHEDULE NOT IMPLEMENTED (REC-13)
+> ```
+>
+> **This does not make CarbonFlow production-ready, and does not constitute a
+> contractual SLA.** Both validations used manual detection on a synthetic
+> dataset over loopback against a single PostgreSQL instance. Automated
+> monitoring, genuine quiescence, high availability and the 7-year regulatory
+> retention question all remain open. Historical statements above are preserved
+> as the record of 2026-10-01 and are superseded only where this block says so.
