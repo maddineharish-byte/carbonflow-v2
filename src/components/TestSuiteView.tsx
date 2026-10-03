@@ -43,16 +43,20 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
         <button
           onClick={onRunTestSuite}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition self-start"
+          aria-busy={isLoading || undefined}
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition self-start disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Play className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Execute Test Suite
+          <Play
+            className={`w-4 h-4 ${isLoading ? 'animate-spin motion-reduce:animate-none' : ''}`}
+            aria-hidden="true"
+          />
+          {isLoading ? 'Running Test Suite…' : 'Execute Test Suite'}
         </button>
       </div>
 
       {/* Summary Scorecard */}
       {testSuiteData && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <div className="text-xs font-semibold uppercase text-slate-400">Total Test Cases</div>
             <div className="text-2xl font-bold text-white mt-1 font-mono">{testSuiteData.total}</div>
@@ -62,7 +66,11 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <div className="text-xs font-semibold uppercase text-slate-400">Passed</div>
             <div className="text-2xl font-bold text-emerald-400 mt-1 font-mono">{testSuiteData.passed}</div>
-            <div className="text-[11px] text-emerald-500/80 mt-0.5">100% Security & Precision Pass</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              {testSuiteData.total > 0
+                ? `${Math.round((testSuiteData.passed / testSuiteData.total) * 100)}% of scenarios passed`
+                : 'No scenarios recorded'}
+            </div>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -104,18 +112,25 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({
               </div>
 
               <div className="flex-1 text-xs space-y-1">
-                <div className="flex items-center justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-slate-300">{test.id}</span>
                     <span className="font-semibold text-white">{test.name}</span>
                   </div>
+                  {/* Pass/fail is carried by the icon and the word, not by the
+                      badge colour alone. */}
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 ${
                       test.passed
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                         : 'bg-rose-950 text-rose-300 border border-rose-800'
                     }`}
                   >
+                    {test.passed ? (
+                      <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
+                    ) : (
+                      <XCircle className="w-3 h-3" aria-hidden="true" />
+                    )}
                     {test.passed ? 'PASSED' : 'FAILED'}
                   </span>
                 </div>

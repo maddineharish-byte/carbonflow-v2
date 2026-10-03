@@ -2,8 +2,9 @@
  * CarbonFlow — Enterprise GHG Accounting & Audit SaaS Platform
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Navbar } from './components/Navbar.tsx';
-import { Sidebar } from './components/Sidebar.tsx';
+import { Sidebar, NAV_ITEMS } from './components/Sidebar.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { BoundariesView } from './components/BoundariesView.tsx';
 import { ActivityDataView } from './components/ActivityDataView.tsx';
@@ -49,6 +50,13 @@ import {
   AuthState,
 } from './types.ts';
 
+// Page titles are derived from the canonical sidebar labels so navigation
+// terminology stays in one place (no parallel wording to drift).
+const VIEW_TITLES: Record<NavView, string> = NAV_ITEMS.reduce(
+  (acc, item) => ({ ...acc, [item.view]: item.label }),
+  {} as Record<NavView, string>,
+);
+
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>('AUTH_LOADING');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -60,6 +68,7 @@ export default function App() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Core domain state
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -76,10 +85,20 @@ export default function App() {
   const [testSuiteData, setTestSuiteData] = useState<any>(null);
   const sessionGeneration = useRef(0);
 
+  // Success messages are announced politely; errors are announced assertively
+  // by the live region in the render tree below (role/aria-live live there).
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    notificationTimer.current = setTimeout(() => setNotification(null), 4000);
   };
+
+  // Never leave a timer running after the shell unmounts.
+  useEffect(() => {
+    return () => {
+      if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    };
+  }, []);
 
   const getMembershipOptions = (authData: AuthSession): AuthMembership[] => {
     return Array.isArray(authData.memberships) ? authData.memberships : [];
@@ -203,6 +222,13 @@ export default function App() {
       }
     }
   }, [clearFrontendSession]);
+
+  // Announce client-side navigation. CarbonFlow switches views by state rather
+  // than by URL, so screen readers get no page-load cue without this.
+  useEffect(() => {
+    if (authState !== 'AUTHENTICATED') return;
+    document.title = `${VIEW_TITLES[currentView] ?? 'Workspace'} — CarbonFlow`;
+  }, [currentView, authState]);
 
   // Register one session-invalid boundary for all authenticated API requests.
   useEffect(() => {
@@ -574,6 +600,14 @@ export default function App() {
       onLogin={handleLogin}
     >
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+      {/* Skip link — first tabbable element on every authenticated page. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:px-3 focus:py-2 focus:rounded-lg focus:bg-emerald-600 focus:text-white focus:text-xs focus:font-semibold"
+      >
+        Skip to main content
+      </a>
+
       {/* Top Bar */}
       <Navbar
         currentOrg={currentOrg}
@@ -599,8 +633,14 @@ export default function App() {
           permissions={permissions}
         />
 
-        {/* Content Area */}
-        <main className="flex-1 p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        {/* Content Area. Padding and width step down at 390px so no view is
+            forced to scroll horizontally; main is the skip-link target. */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          aria-label="Workspace content"
+          className="flex-1 w-full min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto"
+        >
           {currentView === 'DASHBOARD' && (
             <DashboardView
               data={dashboardData}
@@ -705,18 +745,33 @@ export default function App() {
         </main>
       </div>
 
-      {/* Toast Notification */}
-      {notification && (
-        <div
-          className={`fixed bottom-6 right-6 px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2 z-50 border ${
-            notification.type === 'success'
-              ? 'bg-emerald-950 text-emerald-200 border-emerald-800'
-              : 'bg-rose-950 text-rose-200 border-rose-800'
-          }`}
-        >
-          <span>{notification.message}</span>
-        </div>
-      )}
+      {/* Status message. The container is always mounted so assistive technology
+          registers the live region before the first message arrives; errors use
+          role="alert" (assertive) and successes role="status" (polite). The
+          icon is decorative — meaning is carried by the text, never colour. */}
+      <div
+        aria-live={notification?.type === 'error' ? 'assertive' : 'polite'}
+        aria-atomic="true"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 max-w-[calc(100vw-2rem)]"
+      >
+        {notification && (
+          <div
+            role={notification.type === 'error' ? 'alert' : 'status'}
+            className={`px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold flex items-start gap-2 border ${
+              notification.type === 'success'
+                ? 'bg-emerald-950 text-emerald-200 border-emerald-800'
+                : 'bg-rose-950 text-rose-200 border-rose-800'
+            }`}
+          >
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-px" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-px" aria-hidden="true" />
+            )}
+            <span>{notification.message}</span>
+          </div>
+        )}
+      </div>
       </div>
     </AuthBoundary>
   );

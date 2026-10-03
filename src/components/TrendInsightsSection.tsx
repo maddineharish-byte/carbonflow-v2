@@ -38,6 +38,29 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'ALL' | 'ANOMALIES' | 'OPPORTUNITIES'>('ALL');
 
+  const TAB_ORDER: ('ALL' | 'ANOMALIES' | 'OPPORTUNITIES')[] = ['ALL', 'ANOMALIES', 'OPPORTUNITIES'];
+  const TAB_IDS: Record<string, string> = {
+    ALL: 'insights-tab-all',
+    ANOMALIES: 'insights-tab-anomalies',
+    OPPORTUNITIES: 'insights-tab-opportunities',
+  };
+
+  /** Roving-tabindex arrow-key navigation for the analysis tablist. */
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, current: 'ALL' | 'ANOMALIES' | 'OPPORTUNITIES') => {
+    const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (delta === 0 && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+
+    let nextIndex: number;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = TAB_ORDER.length - 1;
+    else nextIndex = (TAB_ORDER.indexOf(current) + delta + TAB_ORDER.length) % TAB_ORDER.length;
+
+    const next = TAB_ORDER[nextIndex];
+    setActiveTab(next);
+    document.getElementById(TAB_IDS[next])?.focus();
+  };
+
   const fetchInsights = async (isManualRefresh = false) => {
     try {
       if (isManualRefresh) {
@@ -108,7 +131,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
   ) || 0;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-sm">
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
         <div className="flex items-start gap-3">
@@ -132,11 +155,24 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Tabs pattern: single-select with roving tabindex, so arrow keys
+              move between tabs and the active tab is announced via
+              aria-selected rather than by its background colour alone. */}
+          <div
+            role="tablist"
+            aria-label="Trend analysis views"
+            className="flex flex-wrap items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs"
+          >
             <button
               type="button"
+              role="tab"
+              id="insights-tab-all"
+              aria-selected={activeTab === 'ALL'}
+              aria-controls="insights-panel"
+              tabIndex={activeTab === 'ALL' ? 0 : -1}
               onClick={() => setActiveTab('ALL')}
+              onKeyDown={(e) => handleTabKeyDown(e, 'ALL')}
               className={`px-3 py-1.5 rounded-md font-medium transition ${
                 activeTab === 'ALL'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -147,7 +183,13 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
             </button>
             <button
               type="button"
+              role="tab"
+              id="insights-tab-anomalies"
+              aria-selected={activeTab === 'ANOMALIES'}
+              aria-controls="insights-panel"
+              tabIndex={activeTab === 'ANOMALIES' ? 0 : -1}
               onClick={() => setActiveTab('ANOMALIES')}
+              onKeyDown={(e) => handleTabKeyDown(e, 'ANOMALIES')}
               className={`px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 ${
                 activeTab === 'ANOMALIES'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -163,7 +205,13 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
             </button>
             <button
               type="button"
+              role="tab"
+              id="insights-tab-opportunities"
+              aria-selected={activeTab === 'OPPORTUNITIES'}
+              aria-controls="insights-panel"
+              tabIndex={activeTab === 'OPPORTUNITIES' ? 0 : -1}
               onClick={() => setActiveTab('OPPORTUNITIES')}
+              onKeyDown={(e) => handleTabKeyDown(e, 'OPPORTUNITIES')}
               className={`px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 ${
                 activeTab === 'OPPORTUNITIES'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -183,10 +231,15 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
             type="button"
             onClick={() => fetchInsights(true)}
             disabled={loading || refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             title="Re-run trend analysis"
+            aria-label="Re-run trend analysis"
+            aria-busy={refreshing || undefined}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-400' : ''}`}
+              aria-hidden="true"
+            />
             <span className="hidden md:inline">{refreshing ? 'Analyzing...' : 'Refresh'}</span>
           </button>
         </div>
@@ -194,7 +247,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
 
       {/* Loading Skeleton */}
       {loading && !insights && (
-        <div className="py-10 flex flex-col items-center justify-center text-center">
+        <div className="py-10 flex flex-col items-center justify-center text-center" role="status">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 animate-pulse">
             <Sparkles className="w-6 h-6" />
           </div>
@@ -207,17 +260,20 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
 
       {/* Error Banner */}
       {error && !loading && (
-        <div className="mt-4 p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+        <div
+          role="alert"
+          className="mt-4 p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-start gap-3"
+        >
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <div className="text-xs font-semibold text-rose-300">Analysis Incomplete</div>
-            <div className="text-xs text-rose-400/90 mt-0.5">{error}</div>
+            <div className="text-xs text-rose-300/90 mt-0.5">{error}</div>
             <button
               type="button"
               onClick={() => fetchInsights(true)}
-              className="mt-2 text-xs text-rose-300 underline font-medium hover:text-white"
+              className="mt-2 text-xs text-rose-200 underline font-medium hover:text-white rounded"
             >
-              Retry AI Analysis
+              Re-run trend analysis
             </button>
           </div>
         </div>
@@ -225,7 +281,13 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
 
       {/* Content */}
       {insights && (
-        <div className="space-y-6 mt-5">
+        <div
+          id="insights-panel"
+          role="tabpanel"
+          aria-labelledby={TAB_IDS[activeTab]}
+          tabIndex={0}
+          className="space-y-6 mt-5"
+        >
           {/* Executive Summary Card */}
           <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 relative overflow-hidden">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
@@ -288,7 +350,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-3.5">
                 {insights.anomalies.map((anomaly) => (
                   <div
                     key={anomaly.id}
@@ -351,7 +413,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
                 {insights.reductionOpportunities.map((opp) => (
                   <div
                     key={opp.id}
@@ -413,12 +475,12 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
           )}
 
           {/* Model Attribution Footnote */}
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/60">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Aligned with GHG Protocol Scope 1 & Scope 2 Guidance (Dual-Reporting Standard)</span>
-            </div>
-            <span>Engine: {insights.modelUsed}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-800/60">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
+              <span>Aligned with GHG Protocol Scope 1 &amp; Scope 2 Guidance (Dual-Reporting Standard)</span>
+            </span>
+            <span className="shrink-0">Engine: {insights.modelUsed}</span>
           </div>
         </div>
       )}

@@ -61,22 +61,43 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
         <p className="text-xs text-slate-400 mt-1">
           Hashed primary utility bills, meter invoices, and contractual PPA guarantee documents.
         </p>
+        {isUploading && (
+          <p className="mt-2 text-xs font-medium text-emerald-300 flex items-center gap-2" role="status">
+            <span
+              className="w-3 h-3 rounded-full border-2 border-emerald-400/40 border-t-emerald-400 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            Uploading and computing SHA-256 checksum…
+          </p>
+        )}
       </div>
 
+      {/* Errors are announced (role="alert") and are not signalled by colour alone:
+          each carries an icon and the full message text. */}
       {uploadError && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div
+          role="alert"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
           {uploadError}
         </div>
       )}
       {downloadError && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div
+          role="alert"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
           {downloadError}
         </div>
       )}
 
-      {/* Upload Dropzone */}
+      {/* Upload Dropzone. Drag-and-drop is a pointer-only enhancement, so the
+          "browse local files" button is the keyboard-reachable equivalent and
+          is a real <button> (Enter and Space both activate it). The file input
+          is visually hidden but still in the tab order order-wise via its
+          trigger, and is labelled for assistive technology. */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -88,31 +109,35 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
           setDragActive(false);
           handleFiles(e.dataTransfer.files);
         }}
-        className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
+        className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition ${
           dragActive
             ? 'border-emerald-500 bg-emerald-950/20'
             : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
         }`}
       >
+        <label htmlFor="evidence-file-input" className="sr-only">
+          Select an evidence document to upload
+        </label>
         <input
+          id="evidence-file-input"
           ref={fileInputRef}
           type="file"
-          className="hidden"
+          className="sr-only"
           accept=".pdf,.csv,.xlsx,.xls,.docx,.png,.jpg,.jpeg,.txt"
           onChange={(e) => handleFiles(e.target.files)}
         />
         <div className="flex flex-col items-center justify-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-emerald-400 border border-slate-700">
-            <UploadCloud className="w-6 h-6" />
+            <UploadCloud className="w-6 h-6" aria-hidden="true" />
           </div>
           <div>
             <div className="text-sm font-semibold text-white">Upload Primary Evidence Document</div>
             <div className="text-xs text-slate-400 mt-0.5">
-              Drag & drop files or{' '}
+              Drag &amp; drop files or{' '}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-emerald-400 hover:underline font-semibold"
+                className="text-emerald-400 hover:underline font-semibold rounded"
               >
                 browse local files
               </button>
@@ -123,6 +148,16 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
           </div>
         </div>
       </div>
+
+      {/* Upload progress is a live region so the result of a keyboard-triggered
+          upload is announced, not just shown. */}
+      <p aria-live="polite" className="sr-only">
+        {isUploading
+          ? 'Uploading evidence document. Please wait.'
+          : uploadError
+            ? ''
+            : 'Evidence upload complete.'}
+      </p>
 
       {/* Vault Files Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
@@ -139,16 +174,24 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="group"
+          aria-label="Evidence vault repository, scrollable"
+        >
+          <table className="w-full min-w-[52rem] text-left text-xs text-slate-300">
+            <caption className="sr-only">
+              Uploaded evidence documents with file size, MIME type, SHA-256 integrity checksum and download action.
+            </caption>
             <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3">Document Name</th>
-                <th className="px-4 py-3">File Size</th>
-                <th className="px-4 py-3">MIME Type</th>
-                <th className="px-4 py-3">SHA-256 Checksum</th>
-                <th className="px-4 py-3">Uploaded</th>
-                <th className="px-4 py-3 text-right">Download</th>
+                <th scope="col" className="px-4 py-3">Document Name</th>
+                <th scope="col" className="px-4 py-3">File Size</th>
+                <th scope="col" className="px-4 py-3">MIME Type</th>
+                <th scope="col" className="px-4 py-3">SHA-256 Checksum</th>
+                <th scope="col" className="px-4 py-3">Uploaded</th>
+                <th scope="col" className="px-4 py-3 text-right">Download</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -165,9 +208,11 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
               ) : (
                 evidence.map((file) => (
                   <tr key={file.id} className="hover:bg-slate-800/50 transition">
-                    <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span>{file.fileName}</span>
+                    <td className="px-4 py-3 font-semibold text-white">
+                      <span className="inline-flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
+                        <span>{file.fileName}</span>
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-slate-400">
                       {(file.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
@@ -184,9 +229,11 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
                         type="button"
                         onClick={() => handleDownload(file.id, file.fileName)}
                         disabled={downloadingId === file.id}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium transition disabled:opacity-50"
+                        aria-label={`Download ${file.fileName}`}
+                        aria-busy={downloadingId === file.id || undefined}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <Download className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
                         {downloadingId === file.id ? 'Loading…' : 'Get'}
                       </button>
                     </td>

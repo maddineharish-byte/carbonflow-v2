@@ -85,7 +85,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
             <FileBarChart className="w-4 h-4 text-emerald-400" />
             <h2 className="text-sm font-bold text-white">Reporting Period Summary</h2>
           </div>
+          <label htmlFor="analytics-summary-period" className="sr-only">
+            Reporting period for summary
+          </label>
           <select
+            id="analytics-summary-period"
             value={selectedPeriodId}
             onChange={(e) => setSelectedPeriodId(e.target.value)}
             className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
@@ -98,11 +102,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
           </select>
         </div>
 
-        {summaryLoading && <div className="py-6 text-center text-slate-400 text-xs">Loading summary…</div>}
+        {summaryLoading && (
+          <div className="py-6 text-center text-slate-400 text-xs" role="status">
+            Loading summary…
+          </div>
+        )}
 
         {summaryError && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          <div
+            role="alert"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200"
+          >
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
             {summaryError}
           </div>
         )}
@@ -113,7 +124,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
 
         {summary && !summaryLoading && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div className="p-3 bg-slate-800 rounded-lg border border-slate-800">
                 <div className="text-slate-400">Period</div>
                 <div className="font-bold text-white mt-0.5">{summary.period.name}</div>
@@ -149,7 +160,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Ledger Totals (tCO₂e, both Scope 2 perspectives separate)
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 text-xs">
                 {[
                   { label: 'Scope 1', value: summary.totals.scope1Tonnes, color: 'text-orange-400' },
                   { label: 'Scope 2 Location', value: summary.totals.scope2LocationTonnes, color: 'text-sky-400' },
@@ -176,8 +187,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
             <ChartLine className="w-4 h-4 text-sky-400" />
             <h2 className="text-sm font-bold text-white">Dimension Breakdown</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="analytics-dimension" className="sr-only">
+              Breakdown dimension
+            </label>
             <select
+              id="analytics-dimension"
               value={dimension}
               onChange={(e) => setDimension(e.target.value as Dimension)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
@@ -188,34 +203,52 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
               ))}
             </select>
             {dimension !== 'period' && (
-              <select
-                value={breakdownPeriodId}
-                onChange={(e) => setBreakdownPeriodId(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                aria-label="Optional period filter"
-              >
-                <option value="">All periods</option>
-                {periods.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <>
+                <label htmlFor="analytics-breakdown-period" className="sr-only">
+                  Optional period filter
+                </label>
+                <select
+                  id="analytics-breakdown-period"
+                  value={breakdownPeriodId}
+                  onChange={(e) => setBreakdownPeriodId(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  aria-label="Optional period filter"
+                >
+                  <option value="">All periods</option>
+                  {periods.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </>
             )}
             <button
               onClick={() => void loadBreakdown()}
               disabled={breakdownLoading}
-              className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition"
+              className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-50"
               title="Refresh breakdown"
+              aria-label="Refresh breakdown"
+              aria-busy={breakdownLoading || undefined}
             >
-              <RefreshCw className={`w-4 h-4 ${breakdownLoading ? 'animate-spin text-emerald-400' : ''}`} />
+              <RefreshCw
+                className={`w-4 h-4 ${breakdownLoading ? 'animate-spin text-emerald-400' : ''}`}
+                aria-hidden="true"
+              />
             </button>
           </div>
         </div>
 
-        {breakdownLoading && <div className="py-6 text-center text-slate-400 text-xs">Loading breakdown…</div>}
+        {breakdownLoading && (
+          <div className="py-6 text-center text-slate-400 text-xs" role="status">
+            Loading breakdown…
+          </div>
+        )}
 
         {breakdownError && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          <div
+            role="alert"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200"
+          >
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
             {breakdownError}
           </div>
         )}
@@ -227,16 +260,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
                 No rows for this dimension yet — log and calculate activity data first.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-300">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="group"
+                aria-label="Dimension breakdown table, scrollable"
+              >
+                <table className="w-full min-w-[48rem] text-left text-xs text-slate-300">
+                  <caption className="sr-only">
+                    Emissions broken down by {breakdown.dimension.replace('_', ' ')}. Scope 2 location and market
+                    perspectives are reported separately.
+                  </caption>
                   <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                     <tr>
-                      <th className="px-4 py-3">{breakdown.dimension.replace('_', ' ')}</th>
-                      <th className="px-4 py-3 text-right">Scope 1</th>
-                      <th className="px-4 py-3 text-right">Scope 2 Location</th>
-                      <th className="px-4 py-3 text-right">Scope 2 Market</th>
-                      <th className="px-4 py-3 text-right">Total (Location)</th>
-                      <th className="px-4 py-3 text-right">Total (Market)</th>
+                      <th scope="col" className="px-4 py-3">{breakdown.dimension.replace('_', ' ')}</th>
+                      <th scope="col" className="px-4 py-3 text-right">Scope 1</th>
+                      <th scope="col" className="px-4 py-3 text-right">Scope 2 Location</th>
+                      <th scope="col" className="px-4 py-3 text-right">Scope 2 Market</th>
+                      <th scope="col" className="px-4 py-3 text-right">Total (Location)</th>
+                      <th scope="col" className="px-4 py-3 text-right">Total (Market)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">

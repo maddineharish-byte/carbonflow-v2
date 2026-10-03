@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calculator, Hash, ShieldCheck, Eye, Download, RefreshCw, AlertTriangle } from 'lucide-react';
 import { EmissionRecord, Facility, Calculation, ReportingPeriod } from '../types.ts';
+import { Modal } from './Modal.tsx';
 import { api } from '../services/api.ts';
 import { hasPermission } from '../services/permissions.ts';
 
@@ -51,7 +52,10 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
     } finally {
       setLoading(false);
     }
-  }, []);
+    // periodFilter is read inside load, so it must be a dependency. Without it
+    // the memoised loader never refetches and the period filter silently does
+    // nothing until the view is remounted.
+  }, [periodFilter]);
 
   useEffect(() => {
     void load();
@@ -84,21 +88,28 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
     facilities.find((f) => f.id === id)?.name || 'Unknown facility';
 
   if (loading) {
-    return <div className="p-8 text-slate-400">Loading emissions ledger…</div>;
+    return (
+      <div className="p-8 text-slate-400" role="status">
+        Loading emissions ledger…
+      </div>
+    );
   }
 
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+        <div
+          role="alert"
+          className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center gap-3"
+        >
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" aria-hidden="true" />
           <span className="text-xs text-rose-200">{error}</span>
         </div>
         <button
           onClick={() => void load()}
           className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition"
         >
-          <RefreshCw className="w-4 h-4" /> Retry
+          <RefreshCw className="w-4 h-4" aria-hidden="true" /> Retry
         </button>
       </div>
     );
@@ -144,7 +155,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
       </div>
 
       {/* Dual Reporting Ledger Summary (backend totals) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Total Scope 1 (Direct)</div>
           <div className="text-2xl font-bold text-white mt-1">
@@ -183,16 +194,24 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="group"
+          aria-label="Audited emissions ledger, scrollable"
+        >
+          <table className="w-full min-w-[48rem] text-left text-xs text-slate-300">
+            <caption className="sr-only">
+              Audited emissions ledger. Scope 1 and Scope 2 rows are shown separately and are never aggregated.
+            </caption>
             <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3">Facility</th>
-                <th className="px-4 py-3">Scope & Source</th>
-                <th className="px-4 py-3">Scope 2 Method</th>
-                <th className="px-4 py-3 text-right">Calculated tCO₂e</th>
-                <th className="px-4 py-3">Audit Hash</th>
-                <th className="px-4 py-3 text-right">Trace</th>
+                <th scope="col" className="px-4 py-3">Facility</th>
+                <th scope="col" className="px-4 py-3">Scope &amp; Source</th>
+                <th scope="col" className="px-4 py-3">Scope 2 Method</th>
+                <th scope="col" className="px-4 py-3 text-right">Calculated tCO₂e</th>
+                <th scope="col" className="px-4 py-3">Audit Hash</th>
+                <th scope="col" className="px-4 py-3 text-right">Trace</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -234,9 +253,11 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleTrace(record.calculationId)}
+                        aria-haspopup="dialog"
+                        aria-label={`View calculation lineage for ${facilityName(record.facilityId)}, ${record.co2eTonnes.toFixed(4)} tCO2e`}
                         className="flex items-center gap-1 ml-auto px-2 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded text-[11px] font-medium transition"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                         Lineage
                       </button>
                     </td>
@@ -250,20 +271,18 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
 
       {/* Calculation Lineage Modal (backend snapshot) */}
       {selectedCalc && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Hash className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">Calculation Audit Lineage Snapshot</h3>
+        <Modal
+          title="Calculation Audit Lineage Snapshot"
+          description="Deterministic calculation trace with SHA-256 integrity checksum, as computed by the backend."
+          onClose={() => setSelectedCalc(null)}
+          closeLabel="Close calculation lineage snapshot"
+          panelClassName="max-w-2xl"
+          headerIcon={<Hash className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />}
+        >
+          {calcLoading ? (
+              <div className="py-8 text-center text-slate-400 text-sm" role="status">
+                Loading calculation snapshot…
               </div>
-              <button onClick={() => setSelectedCalc(null)} className="text-slate-400 hover:text-white">
-                ✕
-              </button>
-            </div>
-
-            {calcLoading ? (
-              <div className="py-8 text-center text-slate-400 text-sm">Loading calculation snapshot…</div>
             ) : (
               <div className="space-y-4 text-xs">
                 {/* Hash Banner */}
@@ -277,7 +296,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                 </div>
 
                 {/* Mathematical Equation Trace */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-3 bg-slate-800 rounded-lg border border-slate-800 space-y-1">
                     <div className="text-slate-400 font-medium">Original Activity Input</div>
                     <div className="font-mono text-white text-sm">
@@ -306,13 +325,17 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                 {/* GHG Breakdown by Gas */}
                 <div className="space-y-2">
                   <div className="font-semibold text-white">Individual Gas Breakdown & GWP Multipliers</div>
-                  <table className="w-full text-left bg-slate-900 rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto rounded-lg">
+                    <table className="w-full min-w-[24rem] text-left bg-slate-900 rounded-lg overflow-hidden">
+                    <caption className="sr-only">
+                      Per-gas raw emissions, applied GWP multiplier and resulting CO2e for this calculation.
+                    </caption>
                     <thead className="bg-slate-800 text-slate-400 text-[10px] uppercase">
                       <tr>
-                        <th className="px-3 py-2">Gas</th>
-                        <th className="px-3 py-2 text-right">Raw Emission (kg)</th>
-                        <th className="px-3 py-2 text-right">GWP Applied</th>
-                        <th className="px-3 py-2 text-right">CO₂e (kg)</th>
+                        <th scope="col" className="px-3 py-2">Gas</th>
+                        <th scope="col" className="px-3 py-2 text-right">Raw Emission (kg)</th>
+                        <th scope="col" className="px-3 py-2 text-right">GWP Applied</th>
+                        <th scope="col" className="px-3 py-2 text-right">CO₂e (kg)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 text-[11px]">
@@ -330,10 +353,11 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {/* Net Output */}
-                <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg flex items-center justify-between">
+                <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-xs font-bold text-emerald-300">Total Net Calculated Emissions</div>
                     <div className="text-[11px] text-emerald-400/80">
@@ -361,8 +385,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                 Close Snapshot
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

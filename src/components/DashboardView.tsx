@@ -55,7 +55,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
   const [snapshotPeriodId, setSnapshotPeriodId] = useState('');
 
   if (!data) {
-    return <div className="p-8 text-slate-400">Loading enterprise metrics...</div>;
+    return (
+      <div className="p-8 text-slate-400" role="status">
+        Loading enterprise metrics...
+      </div>
+    );
   }
 
   const { emissions, auditStatus, auditHealth, categories, facilities } = data;
@@ -96,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
   return (
     <div className="space-y-6">
       {/* Top Banner: Dual-Reporting & Audit State */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-sm">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-sm">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-white tracking-tight">GHG Accounting & Audit Readiness</h1>
@@ -122,13 +126,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
           <button
             onClick={handleExportCsv}
             disabled={isExporting}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 hover:border-slate-600 transition disabled:opacity-50"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 hover:border-slate-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
             title="Download complete audited emissions inventory report as CSV"
+            aria-busy={isExporting || undefined}
           >
-            <Download className={`w-4 h-4 text-emerald-400 ${isExporting ? 'animate-bounce' : ''}`} />
+            <Download
+              className={`w-4 h-4 text-emerald-400 ${isExporting ? 'animate-bounce' : ''}`}
+              aria-hidden="true"
+            />
             <span>{isExporting ? 'Exporting CSV...' : 'Export CSV'}</span>
           </button>
+          <label htmlFor="dashboard-snapshot-period" className="sr-only">
+            Reporting period for snapshot
+          </label>
           <select
+            id="dashboard-snapshot-period"
             value={snapshotPeriodId || periods[0]?.id || ''}
             onChange={(e) => setSnapshotPeriodId(e.target.value)}
             className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none"
@@ -146,23 +158,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
               if (periodId) onSnapshot(periodId);
             }}
             disabled={periods.length === 0}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition disabled:opacity-50"
+            title={
+              periods.length === 0
+                ? 'Create a reporting period before generating a snapshot'
+                : 'Generate an immutable inventory snapshot'
+            }
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Camera className="w-4 h-4" />
+            <Camera className="w-4 h-4" aria-hidden="true" />
             Create Snapshot
           </button>
           <button
             onClick={() => onNavigate('AUDIT')}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition"
           >
-            <FileCheck className="w-4 h-4 text-sky-400" />
+            <FileCheck className="w-4 h-4 text-sky-400" aria-hidden="true" />
             Audit Room
           </button>
         </div>
       </div>
 
+      {/* Export result is announced to screen readers as it appears. */}
       {exportStatus && (
         <div
+          role={exportStatus.success ? 'status' : 'alert'}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium border ${
             exportStatus.success
               ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
@@ -170,16 +189,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
           }`}
         >
           {exportStatus.success ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
           )}
           <span>{exportStatus.message}</span>
         </div>
       )}
 
       {/* Primary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Scope 1 */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -260,7 +279,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
           Dual-Reporting Totals (Non-Aggregated Presentation)
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <div className="p-4 bg-slate-800/60 rounded-lg border border-slate-700/80">
             <div className="text-xs font-semibold text-slate-400">Total Emissions (Location-Based Approach)</div>
             <div className="text-3xl font-extrabold text-white mt-1">
@@ -305,57 +324,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
 
           {/* Quick Metrics & Filter Controls */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setTrendViewMode('ALL')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
-                  trendViewMode === 'ALL'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                All Streams
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendViewMode('DUAL_SCOPE2')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
-                  trendViewMode === 'DUAL_SCOPE2'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Scope 2 Dual
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendViewMode('SCOPE1')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
-                  trendViewMode === 'SCOPE1'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Scope 1 Direct
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendViewMode('TOTALS')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
-                  trendViewMode === 'TOTALS'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Total Impact
-              </button>
+            {/* Stream filter. Implemented as a single-select radiogroup so that
+                "which series are shown" is conveyed by state, not by the
+                highlighted background alone. */}
+            <div
+              role="radiogroup"
+              aria-label="Filter emissions trajectory streams"
+              className="flex flex-wrap items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs"
+            >
+              {(
+                [
+                  { mode: 'ALL', label: 'All Streams' },
+                  { mode: 'DUAL_SCOPE2', label: 'Scope 2 Dual' },
+                  { mode: 'SCOPE1', label: 'Scope 1 Direct' },
+                  { mode: 'TOTALS', label: 'Total Impact' },
+                ] as const
+              ).map(({ mode, label }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={trendViewMode === mode}
+                  onClick={() => setTrendViewMode(mode)}
+                  className={`px-3 py-1.5 rounded-md font-medium transition ${
+                    trendViewMode === mode
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
         {/* Period Stats Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-5 p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
           <div>
             <div className="text-[11px] font-medium text-slate-400">{totalPeriods}-Period Net Trend</div>
             <div className="text-sm font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
@@ -387,7 +392,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
         </div>
 
         {/* Recharts LineChart */}
-        <div className="h-72 w-full">
+        <div
+          className="h-72 w-full"
+          role="img"
+          aria-label={`Emissions trajectory line chart across ${totalPeriods} reporting periods, comparing Scope 1 direct, Scope 2 location-based and Scope 2 market-based emissions. The same values are listed in the period statistics above.`}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trendData} margin={{ top: 12, right: 20, left: -15, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.6} />
@@ -540,7 +549,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
       <TrendInsightsSection onNavigateToTargets={() => onNavigate('TARGETS')} />
 
       {/* Analytical Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Facility Emissions Chart */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -551,10 +560,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
             <Building2 className="w-4 h-4 text-slate-500" />
           </div>
 
-          <div className="h-64 w-full">
+          <div
+              className="h-64 w-full"
+              role="img"
+              aria-label={`Grouped bar chart of Scope 1 direct and Scope 2 electricity emissions for ${facilities.length} reporting facilities.`}
+            >
             {facilities.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center">
-                <Building2 className="w-8 h-8 text-slate-600 mb-2" />
+                <Building2 className="w-8 h-8 text-slate-600 mb-2" aria-hidden="true" />
                 <div className="text-xs text-slate-500">No facility data yet — add facilities and log activity data.</div>
               </div>
             ) : (
@@ -585,7 +598,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
             <TrendingDown className="w-4 h-4 text-slate-500" />
           </div>
 
-          <div className="h-64 w-full flex items-center justify-center">
+          <div
+              className="h-64 w-full flex items-center justify-center"
+              role="img"
+              aria-label={`Pie chart of emissions share by source category across ${categories.length} categories.`}
+            >
             {categories.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>

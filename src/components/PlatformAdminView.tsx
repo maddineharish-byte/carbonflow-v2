@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { OrganizationStatus, PlatformTenant } from '../types.ts';
 import { api } from '../services/api.ts';
+import { ConfirmDialog } from './ConfirmDialog.tsx';
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -40,6 +41,35 @@ export const PlatformAdminView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [actingId, setActingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlatformTenant | null>(null);
+  /** Lifecycle action awaiting confirmation, if any. */
+  const [pendingAction, setPendingAction] = useState<{
+    tenant: PlatformTenant;
+    action: 'approve' | 'reject' | 'suspend';
+  } | null>(null);
+
+  const ACTION_CONFIRM: Record<
+    'approve' | 'reject' | 'suspend',
+    { title: string; confirmLabel: string; body: (name: string) => string }
+  > = {
+    approve: {
+      title: 'Activate this organization?',
+      confirmLabel: 'Approve organization',
+      body: (name) =>
+        `${name} will be activated and its members will be able to sign in and create activity data.`,
+    },
+    reject: {
+      title: 'Reject this organization?',
+      confirmLabel: 'Reject organization',
+      body: (name) =>
+        `${name} will be rejected and cannot be used. The rejection is recorded in the organization audit trail.`,
+    },
+    suspend: {
+      title: 'Suspend this organization?',
+      confirmLabel: 'Suspend organization',
+      body: (name) =>
+        `All members of ${name} will immediately lose access. Persisted emissions, evidence and audit history are retained.`,
+    },
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,7 +129,11 @@ export const PlatformAdminView: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <label htmlFor="platform-status-filter" className="sr-only">
+            Filter organizations by lifecycle status
+          </label>
           <select
+            id="platform-status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none"
@@ -112,22 +146,30 @@ export const PlatformAdminView: React.FC = () => {
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="p-2 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition"
+            className="p-2 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition disabled:cursor-not-allowed disabled:opacity-50"
             title="Refresh"
+            aria-label="Refresh organizations"
+            aria-busy={loading || undefined}
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`}
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>
 
       {actionError && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div
+          role="alert"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" aria-hidden="true" />
           {actionError}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Tenant list */}
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
           <div className="p-4 border-b border-slate-800 flex items-center gap-2">
@@ -136,9 +178,13 @@ export const PlatformAdminView: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="py-8 text-center text-slate-400 text-xs">Loading organizations…</div>
+            <div className="py-8 text-center text-slate-400 text-xs" role="status">
+              Loading organizations…
+            </div>
           ) : error ? (
-            <div className="p-4 text-xs text-rose-200">{error}</div>
+            <div className="p-4 text-xs text-rose-200" role="alert">
+              {error}
+            </div>
           ) : tenants.length === 0 ? (
             <div className="p-12 text-center">
               <Building2 className="w-8 h-8 text-slate-600 mx-auto mb-3" />
@@ -171,36 +217,44 @@ export const PlatformAdminView: React.FC = () => {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => openDetail(tenant)}
+                      aria-label={`View details for ${tenant.name}`}
+                      aria-pressed={selected?.id === tenant.id}
                       className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-semibold border border-slate-700 transition"
                     >
                       Details
                     </button>
                     {tenant.status !== 'ACTIVE' && (
                       <button
-                        onClick={() => handleAction(tenant, 'approve')}
+                        onClick={() => setPendingAction({ tenant, action: 'approve' })}
                         disabled={actingId !== null}
+                        aria-haspopup="dialog"
+                        aria-label={`Approve or reactivate ${tenant.name}`}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-[11px] font-semibold transition disabled:opacity-50"
                         title="Approve (also reactivates suspended/rejected)"
                       >
-                        <CheckCircle className="w-3 h-3" /> Approve
+                        <CheckCircle className="w-3 h-3" aria-hidden="true" /> Approve
                       </button>
                     )}
                     {tenant.status === 'PENDING_ACTIVATION' && (
                       <button
-                        onClick={() => handleAction(tenant, 'reject')}
+                        onClick={() => setPendingAction({ tenant, action: 'reject' })}
                         disabled={actingId !== null}
+                        aria-haspopup="dialog"
+                        aria-label={`Reject ${tenant.name}`}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-[11px] font-semibold transition disabled:opacity-50"
                       >
-                        <XCircle className="w-3 h-3" /> Reject
+                        <XCircle className="w-3 h-3" aria-hidden="true" /> Reject
                       </button>
                     )}
                     {tenant.status === 'ACTIVE' && (
                       <button
-                        onClick={() => handleAction(tenant, 'suspend')}
+                        onClick={() => setPendingAction({ tenant, action: 'suspend' })}
                         disabled={actingId !== null}
+                        aria-haspopup="dialog"
+                        aria-label={`Suspend ${tenant.name}`}
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 rounded text-[11px] font-semibold transition disabled:opacity-50"
                       >
-                        <PauseCircle className="w-3 h-3" /> Suspend
+                        <PauseCircle className="w-3 h-3" aria-hidden="true" /> Suspend
                       </button>
                     )}
                   </div>
@@ -280,6 +334,23 @@ export const PlatformAdminView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Lifecycle confirmation — approve, reject and suspend all change who can
+          access data, so none of them fire on a single click. */}
+      {pendingAction && (
+        <ConfirmDialog
+          title={ACTION_CONFIRM[pendingAction.action].title}
+          body={ACTION_CONFIRM[pendingAction.action].body(pendingAction.tenant.name)}
+          confirmLabel={ACTION_CONFIRM[pendingAction.action].confirmLabel}
+          confirmAriaLabel={`Confirm: ${ACTION_CONFIRM[pendingAction.action].confirmLabel} for ${pendingAction.tenant.name}`}
+          isBusy={actingId !== null}
+          onConfirm={() => {
+            void handleAction(pendingAction.tenant, pendingAction.action);
+            setPendingAction(null);
+          }}
+          onCancel={() => setPendingAction(null)}
+        />
+      )}
     </div>
   );
 };

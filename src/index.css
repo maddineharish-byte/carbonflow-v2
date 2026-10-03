@@ -1,1 +1,51 @@
 @import "tailwindcss";
+
+/*
+ * CarbonFlow — Phase 10.11 accessibility hardening (global base layer)
+ *
+ * 1. Visible focus. The component library predates this phase and uses
+ *    `focus:outline-none` on nearly every control (it relied on a border-colour
+ *    change instead). `!important` is required here: `focus:outline-none`
+ *    compiles to `.focus\:outline-none:focus` (specificity 0,2,0), which would
+ *    otherwise beat any `:focus-visible` rule on equal footing. Keyboard focus
+ *    must never be invisible.
+ * 2. `prefers-reduced-motion` — the dashboard and audit views animate spinners,
+ *    pulses and charts.
+ */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [tabindex="0"]:focus-visible {
+    outline: 2px solid #34d399 !important;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Date/number inputs render their native spinners in near-black on the dark
+     CarbonFlow surface, which makes them effectively invisible. */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.7;
+    cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

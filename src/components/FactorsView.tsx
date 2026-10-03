@@ -28,9 +28,9 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
           <h2 className="text-sm font-bold text-white">IPCC Global Warming Potential (GWP) Reference Sets</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {gwpSets.length === 0 ? (
-            <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500">
+            <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500">
               No GWP reference sets available.
             </div>
           ) : (
@@ -85,18 +85,26 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="group"
+          aria-label="Emission factor directory, scrollable"
+        >
+          <table className="w-full min-w-[60rem] text-left text-xs text-slate-300">
+            <caption className="sr-only">
+              Canonical emission factor versions with input units, source year, geography and active status.
+            </caption>
             <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3">Scope</th>
-                <th className="px-4 py-3">Activity Type</th>
-                <th className="px-4 py-3">Fuel / Emission Source</th>
-                <th className="px-4 py-3">Input Unit</th>
-                <th className="px-4 py-3">Factor Value</th>
-                <th className="px-4 py-3">Source & Year</th>
-                <th className="px-4 py-3">Geography</th>
-                <th className="px-4 py-3">Status</th>
+                <th scope="col" className="px-4 py-3">Scope</th>
+                <th scope="col" className="px-4 py-3">Activity Type</th>
+                <th scope="col" className="px-4 py-3">Fuel / Emission Source</th>
+                <th scope="col" className="px-4 py-3">Input Unit</th>
+                <th scope="col" className="px-4 py-3">Factor Value</th>
+                <th scope="col" className="px-4 py-3">Source &amp; Year</th>
+                <th scope="col" className="px-4 py-3">Geography</th>
+                <th scope="col" className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
