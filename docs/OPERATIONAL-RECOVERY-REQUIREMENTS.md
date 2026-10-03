@@ -936,3 +936,23 @@ results and the gaps in `docs/RECOVERY-CONTROLS-DESIGN.md` §27.**
 > monitoring, genuine quiescence, high availability and the 7-year regulatory
 > retention question all remain open. Historical statements above are preserved
 > as the record of 2026-10-01 and are superseded only where this block says so.
+
+> ### Operational update — Phase 10.8
+>
+> The two lines above that read `SCHEDULER NOT IMPLEMENTED` and `SCHEDULE NOT
+> IMPLEMENTED` are **superseded**: hourly backup scheduling and quarterly drill
+> scheduling now exist (REC-13, REC-15) and were validated end to end (REC-17).
+>
+> ```text
+> Backup frequency hourly    SCHEDULER IMPLEMENTED — DISABLED BY DEFAULT
+>                            (carbonflow.recovery.backup.enabled=false)
+> Restore drill quarterly    SCHEDULING IMPLEMENTED — DISABLED BY DEFAULT;
+>                            safety gate refuses a live-database target
+> Backup monitoring          PARTIAL — still NO human notification; the shipped
+>                            provider writes a structured log only
+> ```
+>
+> Automation remains **off until an operator enables it**, so an installation that
+> has not been configured is not silently backing up anything. The approved
+> targets themselves are unchanged, and remain **project-level requirements, not a
+> contractual SLA**. Operator procedure is in `docs/BACKUP-RECOVERY.md` §8.

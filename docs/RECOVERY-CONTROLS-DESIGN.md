@@ -1236,3 +1236,75 @@ Three more were caught by tests:
 **The approved RTO/RPO are validated for a local procedure, NOT for production.**
 
 ---
+
+---
+
+## 28. Phase 10.8 - Operational automation status
+
+> **REC-13 through REC-17 are IMPLEMENTED and TESTED.**
+> Automation is **disabled by default** and must be deliberately enabled.
+
+| Task | Requirement | Implemented | Tested | Verified |
+| --- | --- | --- | --- | --- |
+| REC-13 | Backup scheduling | YES | YES | YES (local) |
+| REC-14 | Operational notifications | YES | YES | **PARTIAL** - logs only, no out-of-band delivery |
+| REC-15 | Drill scheduling | YES | YES | YES (local) |
+| REC-16 | Operational runbook | YES | YES | YES |
+| REC-17 | End-to-end operational validation | YES | YES | YES |
+
+### Automated backup
+
+| Aspect | State |
+| --- | --- |
+| Schedule | `0 0 * * * *` - top of every hour, configurable |
+| Timezone | UTC by default, explicitly configurable, **no geography hardcoded** |
+| Default | **DISABLED** (`carbonflow.recovery.backup.enabled=false`) |
+| Overlap protection | Single-JVM `AtomicBoolean`; **not** a distributed lock |
+| Successful run | Backup -> verification -> monitoring -> retention, verified set |
+| Failure behaviour | Fail-closed; verification precedes recording success; retention failure never fails a cycle |
+
+### Monitoring and notification
+
+| Aspect | State |
+| --- | --- |
+| Detection | HEALTHY / RUNNING / FAILED / STALE / RPO_AT_RISK / UNVERIFIABLE |
+| Notification | Structured log at WARN/ERROR; **nobody is emailed or paged** |
+| Deduplication | Key = control + event; repeats suppressed within 1 h; re-armed on resolve |
+
+### Recovery drill
+
+| Aspect | State |
+| --- | --- |
+| Schedule | Quarterly, calendar-anchored, explicit zone |
+| Overdue | After the next quarter + 14-day grace |
+| Safe-environment protection | 7 preconditions; the **live database is refused by name**; no override flag |
+| Latest / next drill | Tracked; exposed via `lastOutcome()` / `nextDueAt()` |
+
+### Measured on the development host
+
+```text
+Operational chain  backup -> vault -> manifest -> verification -> monitoring -> notification
+                   VERIFIED set in 1.76 s, monitoring HEALTHY, no alert raised
+
+Drill chain        selection -> isolated restore -> validation -> result -> notification
+                   real isolated restore in 3.58 s
+                   safety gate refused a live-database target and created nothing
+```
+
+### Gaps Phase 10.8 deliberately did not close
+
+| Gap | State | Why |
+| --- | --- | --- |
+| HA / failover | **NOT IMPLEMENTED** | Out of scope for a single-instance project |
+| Production-scale validation | **NOT DONE** | Needs production-like data volume and infrastructure |
+| 7-year retention | **UNRESOLVED** | Requires legal/regulatory input |
+| Tier-3 administrator | **NOT NAMED** | Organisational decision; no name invented |
+| Quiescence | **NOT IMPLEMENTED** | `QuiesceGuard.NoOp`; sets recorded as not quiesced |
+| Cross-host scheduling lock | **NOT IMPLEMENTED** | Would need a database lease |
+| Out-of-band notification | **NOT IMPLEMENTED** | No mail/SMS/pager provider; the contract exists, the provider does not |
+
+---
+
+**Document status: `IMPLEMENTED` (REC-02..REC-17); REC-13 scheduling exists but is DISABLED by default.**
+**Release state: `RELEASE CANDIDATE - FROZEN` (`d42af8b`).**
+**The approved RTO/RPO are validated for a local procedure, NOT for production.**
