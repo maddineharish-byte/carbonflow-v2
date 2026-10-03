@@ -519,16 +519,24 @@ duration, documented findings.
 
 ## 7. Not implemented in this repository
 
+> **Status update — 2026-10-02 (Phase 10.8).** The table below is retained as the
+> record of the freeze date. Its "NOT IMPLEMENTED" entries are **superseded**
+> where noted inline by Phase 10.8 automation; the surrounding warnings — that no
+> production infrastructure exists here, that every step is performed by an
+> operator against infrastructure they provide — **remain accurate**.
+
 | Capability | State |
 | --- | --- |
-| Scheduled/automated backup job | **NOT IMPLEMENTED** — required by the approved "at least once every hour" frequency |
-| Backup verification / restore rehearsal automation | **NOT IMPLEMENTED** |
+| Scheduled/automated backup job | **IMPLEMENTED** (Phase 10.8, REC-13) — `RecoveryBackupScheduler`, hourly in UTC by default, **disabled unless `carbonflow.recovery.backup.enabled=true`** |
+| Backup verification / restore rehearsal automation | **IMPLEMENTED** — REC-06 verification, REC-10 drill, REC-11/REC-12 validation |
 | Point-in-time recovery | **NOT IMPLEMENTED** — depends on PostgreSQL WAL archiving configured outside this repository |
 | Offsite / cross-region replication | **NOT IMPLEMENTED** |
-| Backup monitoring and alerting | **NOT IMPLEMENTED** (see finding F-09) — required by the approved monitoring requirement |
-| Retention enforcement | **NOT IMPLEMENTED** — required by the approved 30-day retention |
-| Encryption at rest for backups | **NOT IMPLEMENTED** — required to hold confidential customer documents under the approved retention |
+| Backup monitoring and alerting | **PARTIAL** (REC-08/REC-14) — detects and records; the shipped provider writes a structured notification to the application log and **does not email or page a human** |
+| Retention enforcement | **IMPLEMENTED** (REC-07) — 30 days, runs after each successful scheduled backup |
+| Encryption at rest for backups | **IMPLEMENTED** (REC-09) — asymmetric gpg; `age` is preferred where installed |
 | Production HA / failover | **NOT IMPLEMENTED** — single instance; the drill assumed the same host returns |
+| Application-level write quiescence during backup | **NOT IMPLEMENTED** — `QuiesceGuard.NoOp`; sets are recorded in the manifest as *not quiesced* |
+| Cross-host scheduling lock | **NOT IMPLEMENTED** — the overlap guard is a single-JVM flag, not a distributed lease |
 
 This repository contains no Dockerfile, container manifest, CI pipeline or
 infrastructure-as-code definition. Every operational step in this document is
@@ -536,7 +544,201 @@ performed by the operator against infrastructure they provide.
 
 ---
 
-## 8. Related documents
+## 8. OPERATIONAL RUNBOOK
+
+> **What this section is.** A procedure for the operator on call. It assumes the
+> Phase 10.7/10.8 controls exist, and it is explicit about the cases where a
+> human is still required.
+>
+> **Reminder.** Approved RTO 4 hours, RPO 1 hour, hourly backups, 30-day
+> retention — all **project-level requirements, not a contractual SLA**.
+
+### 8.1 Enabling automated backup
+
+Automation is **off by default**. Nothing is backed up until it is turned on.
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `carbonflow.recovery.backup.enabled` | `false` | Master switch. No scheduler bean exists while false |
+| `carbonflow.recovery.backup.root` | *(required)* | Absolute directory for backup sets. Must be durable, backed-up storage |
+| `carbonflow.recovery.backup.cron` | `0 0 * * * *` | Top of every hour |
+| `carbonflow.recovery.backup.zone` | `UTC` | Zone the cron is evaluated in |
+| `carbonflow.recovery.backup.timeout` | `PT30M` | Bound on one backup attempt |
+| `carbonflow.recovery.backup.copied-with` | `robocopy` | Recorded in the set for auditability |
+
+Set these, then confirm the startup log line:
+
+```text
+Recovery backup schedule configured: enabled cron="0 0 * * * *" zone=UTC
+Recovery notifications enabled with provider(s) [structured-log] (out-of-band delivery to a human: false)
+```
+
+If recovery notifications are **not** configured, that second line will say so.
+A backup that fails will then be visible only in the log.
+
+### 8.2 Daily check
+
+Roughly a minute, once a day:
+
+1. **Newest backup exists and is recent.** The newest set's age must be under the
+   1-hour RPO window.
+2. **It is `VERIFIED`.** The manifest's `verification.status` must be `VERIFIED`.
+   `UNVERIFIABLE` is **not** a pass.
+3. **No alert is present.** Look for `Recovery notification:` lines at `WARN`
+   or `ERROR`.
+4. **Nothing is being suppressed indefinitely.** A repeatedly suppressed
+   notification means the condition is still unresolved.
+
+The fastest check: the newest set's manifest `createdAt`, and its
+`verification.status`.
+
+```bash
+ls -1t <backupRoot> | head -1
+cat <backupRoot>/<newestSet>/manifest.json | grep -E 'createdAt|"status"'
+```
+
+### 8.3 When a backup fails
+
+1. **Read the alert.** It carries the `backupSetId`, the failure detail, and the
+   severity.
+2. **Find the run.** Search the application log for that `backupSetId`.
+3. **Determine the cause.** Common causes:
+   - `pg_dump`/`pg_dumpall` not resolvable → set `CARBONFLOW_PG_DUMP` /
+     `CARBONFLOW_PG_DUMPALL`
+   - authentication failure → `DB_PASSWORD` unset or wrong
+   - evidence file missing → the database references bytes not on disk; see
+     `docs/BACKUP-RECOVERY.md` §5 "Partial evidence loss"
+   - timeout → the backup exceeded its bound; investigate size or storage
+     latency before simply raising it
+4. **Rerun safely.** The scheduler is idempotent: the next hour will try again.
+   An immediate run is also safe. An existing set directory is **never**
+   overwritten, and a failed attempt leaves no manifest, so a partial set cannot
+   be mistaken for a recovery point.
+5. **Verify the replacement** before considering the incident closed: the new
+   set must be `VERIFIED`.
+6. **Document the incident** in the drill/incident log with the `backupSetId`,
+   cause, and resolution.
+
+### 8.4 When a backup is stale
+
+**Why it is stale.** Look for, in order:
+
+```text
+RPO_AT_RISK  newest set is 45+ minutes old  → the last run did not complete
+BACKUP_MISSING  no backup set exists        → automation never ran, or the root is wrong
+BACKUP_STALE  older than 60 minutes         → runs are failing, or the scheduler is off
+```
+
+**Execute a manual backup.** With automation enabled, simply wait for the next
+hourly trigger after correcting the cause. To confirm immediately, trigger one
+cycle and check the outcome.
+
+**Restore normal scheduling.** Verify:
+
+- `carbonflow.recovery.backup.enabled=true`
+- the cron and zone are what you intend
+- `carbonflow.recovery.backup.root` is writable and durable
+- the next run produced a `VERIFIED` set
+
+**A note on margin.** The approved interval equals the approved RPO, so there is
+**zero slack**: a set older than one hour means the RPO can no longer be met.
+Tightening the interval is a business decision, not an engineering one.
+
+### 8.5 Recovery procedure
+
+Identical whether triggered by an incident or a drill:
+
+```text
+1  identify the backup set      newest VERIFIED set; record its backupSetId
+2  verify the manifest          parses; boundary is coherent
+3  verify the database          database.dump non-empty, digest matches,
+                                pg_restore --list succeeds
+4  verify the vault             every file in vault-integrity.json present,
+                                correct size, SHA-256 matches
+5  restore an ISOLATED database never into the live database; use a name that
+                                differs from DB_NAME
+6  restore the vault            to the ORIGINAL vault path, or rewrite
+                                storage_path; a database-only restore is not a
+                                complete recovery
+7  start the application        re-supply the environment; JWT and refresh
+                                secrets must be the SAME values as before
+8  verify authentication       login 200; wrong password 401; deactivated org 403
+9  verify data                  core tables, rows readable, FK constraints intact
+10 verify evidence              download a record; SHA-256 matches evidence_records
+11 verify tenant isolation      tenant A sees only A; tenant B's id → 403/404
+```
+
+**Stop conditions.** Stop and investigate if step 3 or 4 fails, if Flyway reports
+applying migrations (it must say "No migration necessary"), or if any tenant
+sees another tenant's data.
+
+**Record.** The restored `backupSetId`, who restored it, when, the result of each
+step, and the elapsed time.
+
+### 8.6 Drill procedure (quarterly)
+
+Cadence: quarterly, in `carbonflow.recovery.drill.zone` (UTC by default). The
+scheduler **refuses** to run a drill unless a safe isolated environment is
+configured, reporting `DRILL_NOT_EXECUTABLE` and notifying rather than guessing.
+
+```text
+1  select a backup          newest VERIFIED set
+2  set the isolated target  a database name DIFFERENT from the live DB_NAME
+3  run the drill            scheduler trigger, or RecoveryDrill directly
+4  validate                 all checks in §8.5 steps 2-11 must pass
+5  collect evidence         DrillResult JSON: checks, timings, durations,
+                            findings, environment, and its limitations
+6  measure duration         the RTO clock runs from the declared failure to
+                            verified usability, not to "health is UP"
+7  record findings          including any limitation the drill reports
+8  sign off                 CarbonFlow Operations
+```
+
+**The drill must never touch the live database.** The safety gate refuses a
+recovery target whose name matches `spring.datasource.url`'s database. There is
+no override flag.
+
+**Always record the drill's stated limitations.** A local drill demonstrates the
+recovery *procedure*. It does not demonstrate production RTO, production RPO, high
+availability, or disaster recovery.
+
+### 8.7 Escalation
+
+Preserved verbatim from the approved decision (`docs/OPERATIONAL-RECOVERY-REQUIREMENTS.md` §2.1):
+
+| Tier | Owner | Trigger |
+| --- | --- | --- |
+| 1 | CarbonFlow Operations | Any recovery alert |
+| 2 | Project Owner | Anything unresolved at Tier 1, or any missed required backup |
+| 3 | **Designated technical/hosting administrator** | Failed recovery attempt, suspected backup corruption, or inability to meet the approved RTO/RPO |
+
+Escalation triggers, as approved:
+
+- a qualifying production failure
+- a failed recovery attempt
+- a missed required backup
+- suspected backup corruption
+- inability to meet the approved RTO/RPO
+
+> **Tier 3 remains unnamed.** The approval records a *role*, not a person. Naming
+> an individual is an organisational decision and has **not** been made. Until it
+> is, escalation to Tier 3 is **BLOCKED** — resolve that before relying on this
+> path. No name is invented here.
+
+### 8.8 What this runbook does not cover
+
+| Limitation | Consequence |
+| --- | --- |
+| **No out-of-band notification** | Nobody is emailed or paged. Alerts appear in the application log only |
+| **No application-level quiescence** | A backup is not quiesced; a concurrent evidence upload may fall outside the set. The manifest records this |
+| **No cross-host scheduling lock** | Two application instances on two hosts could back up concurrently |
+| **No HA or failover** | Recovery assumes the same host returns |
+| **Local-scale validation only** | Every measured RTO/RPO figure came from a synthetic dataset over loopback |
+| **Retention is 30 days** | The possible 7-year GHG regulatory baseline is unresolved and not implemented |
+
+---
+
+## 9. Related documents
 
 | Document | Relevance |
 | --- | --- |
