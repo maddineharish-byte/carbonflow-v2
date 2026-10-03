@@ -2,6 +2,7 @@ package com.carbonflow.recovery.schedule;
 
 import com.carbonflow.recovery.RecoveryManifestWriter;
 import com.carbonflow.recovery.coordination.RecoverySetCoordinator;
+import com.carbonflow.recovery.drill.RecoveryDrill;
 import com.carbonflow.recovery.monitor.BackupMonitor;
 import com.carbonflow.recovery.notify.LoggingNotificationProvider;
 import com.carbonflow.recovery.notify.RecoveryNotification;
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Configuration;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +126,128 @@ public class RecoverySchedulerConfiguration {
         return new RecoveryNotificationService(
                 List.of(new LoggingNotificationProvider()), Clock.systemUTC(),
                 RecoveryNotification.defaultRepeatInterval());
+    }
+
+    @Bean
+    public DrillSchedule recoveryDrillSchedule(
+            @Value("${carbonflow.recovery.drill.zone:UTC}") String zone,
+            @Value("${carbonflow.recovery.drill.hour:2}") int hour,
+            @Value("${carbonflow.recovery.drill.last-run:}") String lastRun) {
+        // last-run is empty on a fresh installation, meaning no drill has ever
+        // been performed. That is recorded as "never" rather than defaulted to a
+        // fabricated date, which would make a drill appear to have happened.
+        Instant lastDrillAt = lastRun == null || lastRun.isBlank()
+                ? null : Instant.parse(lastRun);
+        try {
+            return DrillSchedule.quarterly(ZoneId.of(zone), hour, lastDrillAt);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "Invalid recovery drill schedule configuration: " + e.getMessage(), e);
+        }
+    }
+
+    @Bean
+    public RecoveryDrillScheduler recoveryDrillScheduler(
+            RecoverySetCoordinator coordinator,
+            BackupVerifier verifier,
+            RecoveryManifestWriter manifestWriter,
+            RecoveryDrillSchedulerConfig config,
+            DrillSchedule drillSchedule,
+            ObjectProvider<RecoveryNotificationService> notifications,
+            @Value("${carbonflow.recovery.drill.enabled:false}") boolean enabled,
+            @Value("${carbonflow.recovery.drill.recovery-database:}")
+            String recoveryDatabase,
+            @Value("${carbonflow.recovery.drill.target-host:}") String targetHost,
+            @Value("${carbonflow.recovery.drill.target-port:5432}") int targetPort,
+            @Value("${carbonflow.recovery.drill.target-user:}") String targetUser,
+            @Value("${carbonflow.recovery.drill.target-password:}")
+            String targetPassword,
+            @Value("${carbonflow.recovery.drill.target-database:postgres}")
+            String targetDatabase,
+            @Value("${carbonflow.recovery.drill.grace-days:14}") int graceDays,
+            @Value("${carbonflow.recovery.backup.root}") String backupRoot,
+            @Value("${carbonflow.evidence.vault-dir}") String vaultRoot) {
+
+        RecoveryNotificationService notifier = notifications.getIfAvailable();
+
+        RecoveryDrill drill = new RecoveryDrill(Clock.systemUTC(),
+                Map.copyOf(System.getenv()));
+
+        RecoveryDrillScheduler.DrillPerformer performer =
+                (setDirectory, job) -> drill.run(setDirectory,
+                        job.recoveryTarget(), job.recoveryDatabase(),
+                        job.vaultRestoreDirectory(), job.sourceVaultRoot());
+
+        // The live database name is passed in so the safety gate can refuse it.
+        // The drill environment is only constructed when an operator has actually
+        // configured one; otherwise every precondition fails and the drill is
+        // refused with DRILL_NOT_EXECUTABLE rather than guessing a target.
+        RecoveryDrillScheduler.DrillJob job = targetHost == null
+                || targetHost.isBlank()
+                ? new RecoveryDrillScheduler.DrillJob(Path.of(backupRoot), Path.of(vaultRoot),
+                null, recoveryDatabase, null, Map.of())
+                : new RecoveryDrillScheduler.DrillJob(Path.of(backupRoot), Path.of(vaultRoot),
+                new com.carbonflow.recovery.postgres.PostgreSqlBackupTarget(
+                        targetHost, targetPort, targetDatabase, targetUser,
+                        targetPassword.toCharArray(), "prefer"),
+                recoveryDatabase,
+                recoveryDatabase == null || recoveryDatabase.isBlank() ? null
+                        : Path.of(vaultRoot).resolve(".drill-restore").resolve(recoveryDatabase),
+                Map.copyOf(System.getenv()));
+
+        log.info("Recovery drill scheduler: enabled={} schedule={} grace={}d "
+                        + "recoveryDatabase={}", enabled, drillSchedule.describe(),
+                graceDays, recoveryDatabase == null || recoveryDatabase.isBlank()
+                        ? "<not configured>" : recoveryDatabase);
+
+        return new RecoveryDrillScheduler(performer, notifier, drillSchedule, enabled,
+                config.liveDatabaseName(), Clock.systemUTC());
+    }
+
+    @Bean
+    public RecoveryDrillSchedulerConfig recoveryDrillSchedulerConfig(
+            @Value("${spring.datasource.url}") String datasourceUrl) {
+        // The live database name is taken from the application's own JDBC URL so
+        // the safety gate compares against the database the application actually
+        // uses, rather than a separately configured value that could drift.
+        return new RecoveryDrillSchedulerConfig(
+                liveDatabaseNameFrom(datasourceUrl));
+    }
+
+    /**
+     * Extracts the database name from a JDBC URL.
+     *
+     * <p>Falls back to {@code carbonflow} rather than an empty string, so the
+     * safety gate always has something to refuse against. A missing name must not
+     * become a name that matches nothing.
+     */
+    static String liveDatabaseNameFrom(String jdbcUrl) {
+        if (jdbcUrl == null) {
+            return "carbonflow";
+        }
+        int lastSlash = jdbcUrl.lastIndexOf('/');
+        if (lastSlash < 0 || lastSlash == jdbcUrl.length() - 1) {
+            return "carbonflow";
+        }
+        String remainder = jdbcUrl.substring(lastSlash + 1);
+        int query = remainder.indexOf('?');
+        if (query >= 0) {
+            remainder = remainder.substring(0, query);
+        }
+        return remainder.isBlank() ? "carbonflow" : remainder;
+    }
+
+    /** Live database name, used by the drill safety gate to refuse a live target. */
+    public static final class RecoveryDrillSchedulerConfig {
+        private final String liveDatabaseName;
+
+        public RecoveryDrillSchedulerConfig(String liveDatabaseName) {
+            this.liveDatabaseName = liveDatabaseName;
+        }
+
+        public String liveDatabaseName() {
+            return liveDatabaseName;
+        }
     }
 
     @Bean
