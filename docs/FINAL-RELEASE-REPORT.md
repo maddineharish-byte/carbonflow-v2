@@ -1,5 +1,28 @@
 # CarbonFlow Final Release Report
 
+> ### ⚠ Historical record of the 2026-09-30 freeze — Phase 10.14 (2026-10-03)
+>
+> This report is **retained verbatim** as the release record of `d42af8b`. It is
+> **not** the current description of CarbonFlow. Where it disagrees with
+> [`docs/HANDOVER.md`](./HANDOVER.md), the handover is current.
+>
+> Statements in this report that have since changed:
+>
+> | This report says | Current position |
+> | --- | --- |
+> | Backup automation "NOT IMPLEMENTED — **STILL TRUE**" | Phase 10.8 implemented `RecoveryBackupScheduler`. **However**, Phase 10.14 found `@EnableScheduling` is absent from the repository, so the `@Scheduled` trigger cannot fire (F-10). Backups are still, in effect, not running automatically |
+> | "RTO / RPO compliance: NOT YET TESTED" | Validators implemented and tested in Phase 10.7 against a local synthetic dataset. **Production-scale compliance is still NOT DEMONSTRATED** |
+> | Browser UAT "NOT VERIFIED" | **Superseded** — browser UAT was recorded 2026-09-30 |
+> | "320 / 320" Java tests, "36 / 36" frontend tests | Freeze-time figures. A source-level count at `cebb10f` finds 584 backend `@Test` methods; the committed frontend suite is 86 tests. Counts, not run results |
+> | F-02 needs a `V9` | An uncommitted `V9` exists in the working tree from the parallel globalization phase |
+> | "Node/Express absent from the repository" | **True for the repository.** Untracked `server.ts` and `server/` residue remains in the working tree only — see `docs/HANDOVER.md` §15 |
+> | F-02 needs a `V9` | `V9` was added by Phase 10.12 on 2026-10-03 (`cebb10f`), so **F-02 is resolved**. The "no V9" statement in §Git was true only before that date |
+>
+> Findings F-02 to F-09 remain accurately recorded here. The current register,
+> including findings **F-10 and F-11** discovered by the Phase 10.14 audit and
+> **F-12**, which this audit raised and Phase 10.12 closed, is
+> **`docs/HANDOVER.md` §16**.
+
 ## Release
 
 | Field | Value |

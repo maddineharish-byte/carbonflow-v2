@@ -536,7 +536,9 @@ duration, documented findings.
 | Encryption at rest for backups | **IMPLEMENTED** (REC-09) — asymmetric gpg; `age` is preferred where installed |
 | Production HA / failover | **NOT IMPLEMENTED** — single instance; the drill assumed the same host returns |
 | Application-level write quiescence during backup | **NOT IMPLEMENTED** — `QuiesceGuard.NoOp`; sets are recorded in the manifest as *not quiesced* |
-| Cross-host scheduling lock | **NOT IMPLEMENTED** — the overlap guard is a single-JVM flag, not a distributed lease |
+| Cross-host scheduling lock | **IMPLEMENTED** (Phase 10.9) — a PostgreSQL session-level advisory lock (`PostgreSqlBackupLease`), held for the duration of the run. See §8.1a. **Verified by a two-instance test inside one JVM; two-host behaviour NOT VERIFIED** |
+| **The scheduled trigger actually firing** | **NOT IMPLEMENTED — found in Phase 10.14 (F-10).** `@EnableScheduling` is **absent from the repository**, so the `@Scheduled` method on `RecoveryBackupScheduleConfiguration` cannot run even with `carbonflow.recovery.backup.enabled=true`. Setting the flag does **not** start automatic backups. The scheduler tests call `runOnce(...)` directly, which is why they pass |
+| Human notification delivery | **NOT IMPLEMENTED** — the shipped provider writes a structured log line and reports `deliversOutOfBand() == false`. Nobody is emailed or paged |
 
 This repository contains no Dockerfile, container manifest, CI pipeline or
 infrastructure-as-code definition. Every operational step in this document is
@@ -554,6 +556,22 @@ performed by the operator against infrastructure they provide.
 > retention — all **project-level requirements, not a contractual SLA**.
 
 ### 8.1 Enabling automated backup
+
+> ### ⚠ Read this first — Phase 10.14 (F-10)
+>
+> **Enabling automation does not currently start automatic backups.**
+> `@EnableScheduling` does not appear anywhere in the repository, so the
+> `@Scheduled` method on `RecoveryBackupScheduleConfiguration` is never
+> registered with Spring and cannot fire. The configuration below will produce
+> the startup log lines, and then **nothing will be backed up on a schedule**.
+>
+> The scheduler, the cycle, the monitoring and the retention all work — they are
+> exercised by tests that call `runOnce(...)` directly, and an operator can do
+> the same. What is missing is the timer that calls it.
+>
+> Until this is resolved: **take backups on demand, and do not rely on §8.2 as a
+> confirmation that automation is working** — that check assumes sets exist.
+> Tracked as finding **F-10** in `docs/HANDOVER.md` §16.
 
 Automation is **off by default**. Nothing is backed up until it is turned on.
 
@@ -758,9 +776,10 @@ Escalation triggers, as approved:
 
 | Limitation | Consequence |
 | --- | --- |
+| **The scheduled trigger does not fire (F-10, Phase 10.14)** | `@EnableScheduling` is absent from the repository, so enabling `carbonflow.recovery.backup.enabled=true` does **not** start automatic backups. Until this is fixed, backups must be taken on demand. See §8.1 |
 | **No out-of-band notification** | Nobody is emailed or paged. Alerts appear in the application log only |
 | **No application-level quiescence** | A backup is not quiesced; a concurrent evidence upload may fall outside the set. The manifest records this |
-| **No cross-host scheduling lock** | Two application instances on two hosts could back up concurrently |
+| **Cross-host exclusion is single-JVM-tested only** | The advisory lock (§8.1a, Phase 10.9) is enforced by PostgreSQL and was demonstrated with two scheduler instances in one JVM. Behaviour across two genuinely separate hosts is **NOT VERIFIED** and is not claimed |
 | **No HA or failover** | Recovery assumes the same host returns |
 | **Local-scale validation only** | Every measured RTO/RPO figure came from a synthetic dataset over loopback |
 | **Retention is 30 days** | The possible 7-year GHG regulatory baseline is unresolved and not implemented |

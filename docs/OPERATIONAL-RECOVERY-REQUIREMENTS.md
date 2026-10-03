@@ -705,7 +705,7 @@ left-hand column.
 | --- | --- |
 | **Approved requirement** | 1 hour maximum loss of committed database and evidence-vault data |
 | **Observed technical evidence** | 245.8 s observed recovery point; backup boundary verified exact (pre-backup data survived, post-backup data correctly lost); backup was **manual, operator-timed** |
-| **Implementation** | **NOT IMPLEMENTED** — no scheduler; actual recovery point today is unbounded |
+| **Implementation** | **NOT IMPLEMENTED as of 2026-10-01** — no scheduler; actual recovery point today is unbounded. *Superseded 2026-10-03: a scheduler class exists (Phase 10.8) but its `@Scheduled` trigger cannot fire — `@EnableScheduling` is absent (F-10). See `docs/HANDOVER.md` §16.* |
 | **Technical compliance validation** | **NOT YET TESTED** |
 
 ### Backup frequency
@@ -714,7 +714,7 @@ left-hand column.
 | --- | --- |
 | **Approved requirement** | At least once every hour, database + evidence vault, consistent boundary |
 | **Observed technical evidence** | Manual `pg_dump` and vault copy, performed on demand; vault drill used `robocopy`, not the documented `rsync` (recorded deviation) |
-| **Implementation** | **NOT IMPLEMENTED** |
+| **Implementation** | **NOT IMPLEMENTED as of 2026-10-01.** *Superseded 2026-10-03: see F-10 — the scheduler trigger does not fire, so scheduled hourly backup is still effectively absent.* |
 | **Technical compliance validation** | **NOT YET TESTED** |
 
 ### Retention
@@ -722,8 +722,8 @@ left-hand column.
 | | |
 | --- | --- |
 | **Approved requirement** | 30 days, database backups + evidence-vault backups |
-| **Observed technical evidence** | None — no retention enforcement exists; no measurement possible |
-| **Implementation** | **NOT IMPLEMENTED** |
+| **Observed technical evidence** | None as of 2026-10-01 — no retention enforcement existed; no measurement possible. *Retention was implemented in Phase 10.8 (30 days, runs after each successful scheduled backup) but has never run in production, because the scheduler trigger does not fire (F-10)* |
+| **Implementation** | **NOT IMPLEMENTED as of 2026-10-01.** *Superseded 2026-10-03: implemented in Phase 10.8; not yet exercised in operation (F-10). The 7-year baseline remains UNRESOLVED — F-11* |
 | **Technical compliance validation** | **NOT YET TESTED** |
 
 ### Monitoring
@@ -731,8 +731,8 @@ left-hand column.
 | | |
 | --- | --- |
 | **Approved requirement** | Automated monitoring of execution, freshness, failures, vault status; alerts on failure, staleness, unverifiable backup |
-| **Observed technical evidence** | None — finding F-09 remains open |
-| **Implementation** | **NOT IMPLEMENTED** |
+| **Observed technical evidence** | None as of 2026-10-01 — finding F-09 remains open. *Backup health classification and alert *generation* were implemented in Phase 10.8; **out-of-band delivery to a human remains NOT IMPLEMENTED** (log-only)* |
+| **Implementation** | **NOT IMPLEMENTED as of 2026-10-01.** *Superseded 2026-10-03: detection implemented (Phase 10.8). Notification delivery is **still log-only** — nobody is emailed or paged. Finding F-09 remains open* |
 | **Technical compliance validation** | **NOT YET TESTED** |
 
 ### Restore drill
@@ -741,7 +741,7 @@ left-hand column.
 | --- | --- |
 | **Approved requirement** | Quarterly, with a defined evidence set |
 | **Observed technical evidence** | One drill performed 2026-09-30 against an isolated scratch environment; all §4 steps executed; restored evidence file SHA-256 identical at four independent points; tenant isolation verified |
-| **Implementation** | n/a — organisational. Cadence **NOT SCHEDULED** |
+| **Implementation** | n/a — organisational. Cadence **NOT SCHEDULED**. *Phase 10.8 added a quarterly drill scheduler, but it has **no trigger** — `runScheduled(...)` is never invoked on a timer, and F-10 applies to it as well* |
 | **Technical compliance validation** | Procedure **DEMONSTRATED** (under drill conditions). RTO/RPO compliance **NOT YET TESTED** |
 
 ---

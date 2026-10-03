@@ -57,14 +57,39 @@ Production build: `npm run build` (static bundle) served behind the same origin 
 ## Tests
 
 ```bash
-npm run test:frontend   # node:test suites in src/ (auth boundary, refresh races, auth flow, integration)
+npm run test:frontend   # node:test suites in src/
 ```
 
-36 tests: auth boundary (4), API refresh races (4), auth flow (6), integration (22 — navigation gating, dashboard real/empty states, backend-driven target progress, audit transitions, inventory/analytics contracts, CSV auth header, 403/404/409/500 mapping, no-demo-fallback assertions).
+**86 tests** across six suites, all passing as of 2026-10-03 (verified in
+Phase 10.14 against commit `cebb10f`):
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `auth-boundary.test.tsx` | 4 | Protected content hidden until authenticated; no credential text in markup |
+| `api-refresh.test.ts` | 4 | Refresh races (single-flight), one retry, failed-refresh handling, 403 does not refresh |
+| `auth-flow.test.ts` | 6 | Login/logout/`me`, token storage, `USER_DEACTIVATED` |
+| `integration.test.tsx` | 22 | Navigation gating, dashboard real/empty states, backend-driven target progress, audit transitions, inventory/analytics contracts, CSV auth header, 403/404/409/500 mapping, no-demo-fallback assertions |
+| `accessibility.test.tsx` | 30 | Skip link, focus visibility/trapping, reduced motion, dialog semantics, labelling, table semantics, live regions, full SHA-256 rendering, terminology locks |
+| `globalization.test.ts` | 20 | UTC-based `formatInstant`, `Intl.NumberFormat` via `formatQuantity`, no system-default-zone clock in the backend, no hardcoded geography/currency |
+
+> **Superseded counts.** This file previously stated **36 tests**, which
+> excluded `accessibility.test.tsx` even though that suite is in the runner
+> command. Phase 10.12 then added `globalization.test.ts`.
+
+> **Do not skip a failing guard.** Each suite encodes a real defect class; two
+> are easy to dismiss by mistake. `globalization.test.ts` fails if timestamps
+> render in an unlabelled reader-local zone or numbers mix `1.234,5678` with
+> `1234.5678` on one screen. `accessibility.test.tsx` fails if a control loses
+> its accessible name or a dialog loses its semantics.
 
 ## Known limitations
 
+- Navigation is **state-based, not URL-routed**. There is no router: no deep links, no browser back/forward, no per-view URL.
 - Legal entities, departments and organizational boundaries have backend APIs but no UI yet (no existing frontend surface to wire; deferred).
 - Evidence detail/versions/link/delete endpoints exist in the backend; the UI covers list/upload/download only.
 - Activity update/submit and facility update/delete verbs exist in the backend; the UI covers create/list.
-- Browser UAT could not be automated in the build environment (no desktop browser connected); an API-level smoke test against the live stack (login → session → all module endpoints → CSV export → logout) was performed instead.
+- Evidence is downloaded as a blob through a hand-written `fetch` so the `Authorization` header is always sent. Tokens are never placed in a URL, including this path.
+- Timestamps render through `src/services/format.ts` as `YYYY-MM-DD HH:MM:SS UTC` and rendered quantities through `Intl.NumberFormat` (`formatQuantity`). There is deliberately **no** locale-aware date rendering, because the same immutable UTC instant must look identical to every reader.
+- `package.json` still carries the placeholder name `react-example` and retains `dotenv` as a dependency although `src/` does not import it.
+- `tsconfig.json` has no `strict` flag and no `include`/`exclude`; type safety is therefore weaker than the tooling would otherwise give.
+- Browser UAT could not be automated in the build environment (no desktop browser connected); an API-level smoke test against the live stack (login → session → all module endpoints → CSV export → logout) was performed instead. *Superseded: real browser UAT was subsequently recorded — see `docs/OPERATIONAL-VALIDATION.md`.*

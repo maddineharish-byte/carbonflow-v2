@@ -51,6 +51,7 @@ management, inventory, analytics, targets and reduction projects.
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | System architecture |
 | [`PERSISTENCE-ARCHITECTURE.md`](./PERSISTENCE-ARCHITECTURE.md) | Persistence design |
 | [`DECISIONS.md`](./DECISIONS.md) | Architecture decision records (ADR-001–021) |
+| [`GLOBALIZATION.md`](./GLOBALIZATION.md) | Locale-independent formatting; removal of hardcoded geography/currency defaults |
 | [`UI_UX.md`](./UI_UX.md) | UI/UX information architecture |
 | [`TASKS.md`](./TASKS.md) | Implementation roadmap (historical task log) |
 
@@ -80,6 +81,7 @@ management, inventory, analytics, targets and reduction projects.
 | Document | Purpose |
 | --- | --- |
 | [`EXECUTION.md`](./EXECUTION.md) | How to run and operate the stack |
+| [`DEPLOYMENT-READINESS.md`](./DEPLOYMENT-READINESS.md) | What a safe deployment requires, what the repository provides, and what the operator must supply (Phase 10.13). Provider-neutral |
 | [`DEPLOYMENT-READINESS.md`](./DEPLOYMENT-READINESS.md) | Deployment readiness assessment, environment separation, deployment and rollback checklists |
 | [`BACKUP-RECOVERY.md`](./BACKUP-RECOVERY.md) | Backup and recovery procedures, plus the operational runbook |
 | [`RECOVERY-CONTROLS-DESIGN.md`](./RECOVERY-CONTROLS-DESIGN.md) | Recovery control design, rationale and measured results |
@@ -93,6 +95,14 @@ management, inventory, analytics, targets and reduction projects.
 | [`TEST_PLAN.md`](./TEST_PLAN.md) | Quality assurance and test plan. *Historical task log; not valid UTF-8 (pre-existing)* |
 | [`UI-AUDIT.md`](./UI-AUDIT.md) | UI audit |
 | [`PHASE10.11-ACCESSIBILITY.md`](./PHASE10.11-ACCESSIBILITY.md) | Accessibility hardening |
+| [`GLOBALIZATION.md`](./GLOBALIZATION.md) | Globalization hardening (Phase 10.12), including migration `V9` |
+| [`PHASE10.10-PERFORMANCE.md`](./PHASE10.10-PERFORMANCE.md) | Performance & scalability baseline. **Single-host synthetic measurements that disclaim SLA, capacity and production claims** |
+
+> **Note on the "frozen migrations" claim.** `docs/DECISIONS.md` and
+> `docs/FINAL-RELEASE-REPORT.md` state that `V1`–`V8` are frozen with **no
+> `V9`**. That was true until Phase 10.12 added `V9` on 2026-10-03
+> (`cebb10f`). The freeze **principle** is unchanged — migrations are added
+> forward and never edited.
 
 ### Historical — read as a record, not as current state
 

@@ -4,6 +4,34 @@
 **Date:** 2026-09-30
 **State:** `RELEASE CANDIDATE — FROZEN`
 
+> ### ⚠ Superseded as current-state documentation — Phase 10.14 (2026-10-03)
+>
+> This document is the **frozen handover record of 2026-09-30**. It is retained
+> **verbatim and unrewritten** as evidence of the position at the freeze, and it
+> is **not** the current description of CarbonFlow.
+>
+> **Current authoritative handover: [`docs/HANDOVER.md`](./HANDOVER.md).**
+>
+> The main statements in this document that have since changed:
+>
+> | This document says | Current position |
+> | --- | --- |
+> | Recovery controls are "NOT IMPLEMENTED" — no scheduler, no retention, no monitoring (§4, §6, §7, §8) | Phases 10.7–10.8 implemented REC-02..REC-17. **However**, Phase 10.14 found that the `@Scheduled` trigger cannot fire because `@EnableScheduling` is absent (F-10), so the scheduler is not actually running |
+> | "RTO validation: NOT YET TESTED. RPO validation: NOT YET TESTED" | Validators were implemented and tested in Phase 10.7, but only against a local synthetic dataset. **Production-scale compliance is still NOT DEMONSTRATED** |
+> | Browser UAT "entirely unverified" | **Superseded.** Browser UAT was recorded on 2026-09-30 — see `docs/OPERATIONAL-VALIDATION.md` |
+> | "No cross-host scheduling lock" | Phase 10.9 implemented a PostgreSQL advisory-lock lease. Two-**host** behaviour remains unverified |
+> | "No backup or restore has been executed" (§8.3) | A rehearsal was performed on 2026-09-30 against an isolated scratch environment |
+> | Open items `?token=`, login throttling, DB TLS | All three implemented; DB TLS was finding F-01, resolved in Phase 10.6.1 |
+> | F-02 deferred — needs a `V9` | `V9` was added by Phase 10.12 on 2026-10-03 (`cebb10f`), so **F-02 is resolved** |
+>
+> The §7 "VERIFIED" test counts (320 Java, 36 frontend) are the figures of the
+> freeze. They predate the recovery-control and accessibility suites; a
+> source-level count at `cebb10f` finds 584 backend `@Test` methods and the
+> committed frontend suite is 86 tests. Those are **counts**, not run results.
+>
+> Also see [`docs/PHASE-HISTORY.md`](./PHASE-HISTORY.md) for how each of these
+> statements was superseded.
+
 This is the operator- and client-facing handover. It states what CarbonFlow is,
 how to run it, and — just as importantly — **what has not been verified**.
 
