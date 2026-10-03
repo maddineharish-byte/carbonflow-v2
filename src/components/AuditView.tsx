@@ -19,6 +19,7 @@ import {
 import { AuditDetail, AuditStatus, RoleName, ReportingPeriod } from '../types.ts';
 import { api } from '../services/api.ts';
 import { hasPermission } from '../services/permissions.ts';
+import { formatAuditInstant } from '../services/format.ts';
 import { Modal } from './Modal.tsx';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 
@@ -340,7 +341,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
                     {item.notes && <p className="text-[11px] text-amber-400/90 mt-1">{item.notes}</p>}
                     {item.verifiedAt && (
                       <div className="text-[10px] text-slate-500 mt-1">
-                        Verified at: {new Date(item.verifiedAt).toLocaleDateString()}
+                        Verified at: {formatAuditInstant(item.verifiedAt)}
                       </div>
                     )}
                   </div>
@@ -420,7 +421,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
                     <span className="font-semibold text-slate-200">
                       {c.userName} ({c.userRole})
                     </span>
-                    <span className="text-slate-500">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                    <span className="text-slate-500">{formatAuditInstant(c.createdAt)}</span>
                   </div>
                   <p className="text-slate-300">{c.commentText}</p>
                 </div>

@@ -4,6 +4,7 @@
 import React from 'react';
 import { Layers, Globe2, BookOpen, ShieldCheck } from 'lucide-react';
 import { EmissionFactor, GwpSet } from '../types.ts';
+import { formatInteger } from '../services/format.ts';
 
 interface FactorsViewProps {
   gwpSets: GwpSet[];
@@ -61,7 +62,7 @@ export const FactorsView: React.FC<FactorsViewProps> = ({ gwpSets, emissionFacto
                     <div key={value.gas} className="flex justify-between text-slate-300">
                       <span>{value.gas}</span>
                       <span className="font-bold text-emerald-400">
-                        {Number(value.gwp100yr).toLocaleString()}
+                        {formatInteger(Number(value.gwp100yr))}
                       </span>
                     </div>
                   ))

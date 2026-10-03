@@ -16,6 +16,7 @@ import {
   Facility,
 } from '../types.ts';
 import { hasPermission } from '../services/permissions.ts';
+import { formatQuantity, formatPercent } from '../services/format.ts';
 import { Modal } from './Modal.tsx';
 
 interface TargetsViewProps {
@@ -247,7 +248,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                   <div className="flex justify-between text-[11px] text-slate-400">
                     <span>Decarbonization Trajectory</span>
                     {progress != null ? (
-                      <span className="font-semibold text-white">{progress.toFixed(1)}% realized</span>
+                      <span className="font-semibold text-white">{formatPercent(progress, 1)} realized</span>
                     ) : (
                       <span className="text-slate-500">No emissions data for target period yet</span>
                     )}
@@ -263,7 +264,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                     aria-valuenow={progress != null ? Number(progress.toFixed(1)) : undefined}
                     aria-valuetext={
                       progress != null
-                        ? `${progress.toFixed(1)} percent of target reduction realized`
+                        ? `${formatQuantity(progress, 1)} percent of target reduction realized`
                         : 'No emissions data for target period yet'
                     }
                     aria-label={`${target.name} decarbonization trajectory`}
@@ -276,8 +277,8 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                   </div>
                   {target.hasPersistedEmissions && (
                     <div className="flex justify-between text-[10px] text-slate-500">
-                      <span>Current (location): {target.currentLocationBasedT?.toFixed(2) ?? '—'} t</span>
-                      <span>Current (market): {target.currentMarketBasedT?.toFixed(2) ?? '—'} t</span>
+                      <span>Current (location): {formatQuantity(target.currentLocationBasedT, 2)} t</span>
+                      <span>Current (market): {formatQuantity(target.currentMarketBasedT, 2)} t</span>
                     </div>
                   )}
                 </div>
@@ -295,8 +296,8 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
           <div>
             <h2 className="text-sm font-bold text-white">Decarbonization Project Pipeline</h2>
             <div className="text-xs text-slate-400">
-              Total expected reductions: {totalExpectedReductions.toFixed(1)} tCO₂e | Actual achieved:{' '}
-              <span className="text-emerald-400 font-semibold">{totalActualReductions.toFixed(1)} tCO₂e</span>
+              Total expected reductions: {formatQuantity(totalExpectedReductions, 1)} tCO₂e | Actual achieved:{' '}
+              <span className="text-emerald-400 font-semibold">{formatQuantity(totalActualReductions, 1)} tCO₂e</span>
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ChartLine, AlertTriangle, RefreshCw, FileBarChart, Lock } from 'lucide-react';
 import { Breakdown, PeriodSummary, ReportingPeriod } from '../types.ts';
 import { api } from '../services/api.ts';
+import { formatQuantity } from '../services/format.ts';
 
 interface AnalyticsViewProps {
   periods: ReportingPeriod[];
@@ -66,8 +67,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ periods }) => {
     void loadBreakdown();
   }, [loadBreakdown]);
 
-  const formatTonnes = (value: number) =>
-    Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  const formatTonnes = (value: number) => formatQuantity(value, 4);
 
   return (
     <div className="space-y-6">

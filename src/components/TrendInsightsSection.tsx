@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { TrendInsightsResponse, EmissionAnomaly, ReductionOpportunity } from '../types.ts';
 import { api } from '../services/api.ts';
+import { formatQuantity } from '../services/format.ts';
 
 interface TrendInsightsSectionProps {
   onNavigateToTargets?: () => void;
@@ -314,7 +315,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
                 {totalEstimatedReduction > 0 && (
                   <div className="flex items-center gap-1.5 pl-3 border-l border-slate-800">
                     <Target className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Identified Opportunity: <strong className="text-emerald-400">{totalEstimatedReduction.toFixed(1)} tCO₂e/yr</strong></span>
+                    <span>Identified Opportunity: <strong className="text-emerald-400">{formatQuantity(totalEstimatedReduction, 1)} tCO₂e/yr</strong></span>
                   </div>
                 )}
               </div>
@@ -457,7 +458,7 @@ export const TrendInsightsSection: React.FC<TrendInsightsSectionProps> = ({ onNa
                       <div>
                         <span className="text-[10px] uppercase font-semibold text-slate-400 block">Est. Reduction</span>
                         <span className="text-sm font-extrabold text-emerald-400">
-                          -{opp.estimatedReductionTonnes.toFixed(1)} <span className="text-xs font-normal text-slate-400">tCO₂e / yr</span>
+                          -{formatQuantity(opp.estimatedReductionTonnes, 1)} <span className="text-xs font-normal text-slate-400">tCO₂e / yr</span>
                         </span>
                       </div>
                       <div className="text-right">

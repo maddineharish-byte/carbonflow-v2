@@ -575,8 +575,22 @@ class Phase7IntegrationTest extends AccountingTestBase {
         Path main = Path.of("src", "main", "java");
         assertTrue(Files.isDirectory(main),
                 "surefire must run from backend-java to scan production sources");
+        // Phase 10.12: this list was originally India-shaped ("Asia/Kolkata",
+        // "INR", the rupee sign). A deny-list scoped to one country cannot be a
+        // globalization control -- it would happily pass a codebase that had
+        // quietly hardcoded "America/New_York" or "EUR". The list is now global.
+        //
+        // The broader globalization guard lives in src/globalization.test.ts,
+        // which additionally scans db/migration (where the V1 country/currency
+        // DEFAULTS lived, invisible to this scan) and the React frontend, and
+        // asserts locale behaviour across representative configurations.
         String[] banned = {
-                "Asia/Kolkata", "Asia/Calcutta", "INR", "\u20B9",
+                // IANA time zones from more than one region
+                "Asia/Kolkata", "Asia/Calcutta", "Asia/Tokyo",
+                "America/New_York", "America/Chicago", "Europe/Berlin",
+                // Currency codes and symbols
+                "INR", "USD", "EUR", "JPY", "GBP", "\u20B9", "\u20AC", "\u00A5",
+                // Pre-existing demo/LLM guards, unchanged
                 "period-2024", "gemini"};
         List<String> violations = new ArrayList<>();
         try (Stream<Path> files = Files.walk(main)) {

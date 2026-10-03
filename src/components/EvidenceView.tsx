@@ -6,6 +6,7 @@
 import React, { useState, useRef } from 'react';
 import { FolderLock, UploadCloud, FileText, Download, ShieldCheck, HardDrive, AlertTriangle } from 'lucide-react';
 import { EvidenceRecord } from '../types.ts';
+import { formatQuantity, formatAuditInstant } from '../services/format.ts';
 
 interface EvidenceViewProps {
   evidence: EvidenceRecord[];
@@ -215,14 +216,14 @@ export const EvidenceView: React.FC<EvidenceViewProps> = ({ evidence, linkedActi
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-400">
-                      {(file.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
+                      {formatQuantity(file.fileSizeBytes / (1024 * 1024), 2)} MB
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{file.mimeType}</td>
                     <td className="px-4 py-3 font-mono text-[10px] text-emerald-400/90 break-all max-w-[200px]">
                       {file.sha256Hash}
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-[11px]">
-                      {new Date(file.createdAt).toLocaleDateString()}
+                      {formatAuditInstant(file.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

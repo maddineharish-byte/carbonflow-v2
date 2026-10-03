@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calculator, Hash, ShieldCheck, Eye, Download, RefreshCw, AlertTriangle } from 'lucide-react';
 import { EmissionRecord, Facility, Calculation, ReportingPeriod } from '../types.ts';
+import { formatQuantity, formatAuditInstant } from '../services/format.ts';
 import { Modal } from './Modal.tsx';
 import { api } from '../services/api.ts';
 import { hasPermission } from '../services/permissions.ts';
@@ -159,7 +160,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Total Scope 1 (Direct)</div>
           <div className="text-2xl font-bold text-white mt-1">
-            {summary?.scope1Tonnes.toFixed(4) ?? '0'} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
+            {formatQuantity(summary?.scope1Tonnes, 4)} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1">Stationary + Mobile + Fugitive</div>
         </div>
@@ -167,7 +168,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Total Scope 2 (Location-Based)</div>
           <div className="text-2xl font-bold text-sky-400 mt-1">
-            {summary?.scope2LocationTonnes.toFixed(4) ?? '0'} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
+            {formatQuantity(summary?.scope2LocationTonnes, 4)} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1">Grid average emissions</div>
         </div>
@@ -175,7 +176,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Total Scope 2 (Market-Based)</div>
           <div className="text-2xl font-bold text-emerald-400 mt-1">
-            {summary?.scope2MarketTonnes.toFixed(4) ?? '0'} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
+            {formatQuantity(summary?.scope2MarketTonnes, 4)} <span className="text-xs font-normal text-slate-400">tCO₂e</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1">Contractual green instruments (PPA/RECs)</div>
         </div>
@@ -245,7 +246,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                       {record.scope2Type ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">
-                      {record.co2eTonnes.toFixed(4)}
+                      {formatQuantity(record.co2eTonnes, 4)}
                     </td>
                     <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
                       #{record.calculationId.slice(0, 8)}
@@ -254,7 +255,7 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                       <button
                         onClick={() => handleTrace(record.calculationId)}
                         aria-haspopup="dialog"
-                        aria-label={`View calculation lineage for ${facilityName(record.facilityId)}, ${record.co2eTonnes.toFixed(4)} tCO2e`}
+                        aria-label={`View calculation lineage for ${facilityName(record.facilityId)}, ${formatQuantity(record.co2eTonnes, 4)} tCO2e`}
                         className="flex items-center gap-1 ml-auto px-2 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded text-[11px] font-medium transition"
                       >
                         <Eye className="w-3.5 h-3.5" aria-hidden="true" />
@@ -361,12 +362,12 @@ export const EmissionsView: React.FC<EmissionsViewProps> = ({ permissions, perio
                   <div>
                     <div className="text-xs font-bold text-emerald-300">Total Net Calculated Emissions</div>
                     <div className="text-[11px] text-emerald-400/80">
-                      Calculated at: {new Date(selectedCalc.calculatedAt).toLocaleString()}
+                      Calculated at: {formatAuditInstant(selectedCalc.calculatedAt)}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-xl font-extrabold text-white font-mono">
-                      {selectedCalc.totalCo2eTonnes.toFixed(4)}{' '}
+                      {formatQuantity(selectedCalc.totalCo2eTonnes, 4)}{' '}
                       <span className="text-xs font-normal text-slate-300">tCO₂e</span>
                     </div>
                     <div className="text-[11px] font-mono text-slate-400">

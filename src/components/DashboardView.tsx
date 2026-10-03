@@ -37,6 +37,7 @@ import {
 } from 'recharts';
 import { DashboardSummary, ReportingPeriod } from '../types.ts';
 import { api } from '../services/api.ts';
+import { formatQuantity, formatPercent } from '../services/format.ts';
 import { TrendInsightsSection } from './TrendInsightsSection.tsx';
 
 interface DashboardViewProps {
@@ -75,8 +76,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
   const cumulativeMarketTonnes = trendData.reduce((acc, p) => acc + p.totalMarketBasedTonnes, 0);
   const avgMarketTonnes = totalPeriods > 0 ? (cumulativeMarketTonnes / totalPeriods) : 0;
   const netReductionPct = firstPeriod && firstPeriod.totalMarketBasedTonnes > 0
-    ? (((firstPeriod.totalMarketBasedTonnes - latestPeriod.totalMarketBasedTonnes) / firstPeriod.totalMarketBasedTonnes) * 100).toFixed(1)
-    : '0.0';
+    ? (((firstPeriod.totalMarketBasedTonnes - latestPeriod.totalMarketBasedTonnes) / firstPeriod.totalMarketBasedTonnes) * 100)
+    : 0;
   const totalAvoidedMarketTonnes = trendData.reduce(
     (acc, p) => acc + Math.max(0, p.totalLocationBasedTonnes - p.totalMarketBasedTonnes),
     0
@@ -365,7 +366,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
             <div className="text-[11px] font-medium text-slate-400">{totalPeriods}-Period Net Trend</div>
             <div className="text-sm font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
               <ArrowDownRight className="w-3.5 h-3.5" />
-              <span>{netReductionPct}% reduction</span>
+              <span>{formatPercent(netReductionPct, 1)} reduction</span>
             </div>
           </div>
           <div>
@@ -378,7 +379,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
           <div>
             <div className="text-[11px] font-medium text-slate-400">Average per Period</div>
             <div className="text-sm font-bold text-sky-400 mt-0.5">
-              {avgMarketTonnes.toFixed(1)}{' '}
+              {formatQuantity(avgMarketTonnes, 1)}{' '}
               <span className="text-[10px] text-slate-400 font-normal">tCO₂e / cycle</span>
             </div>
           </div>
@@ -386,7 +387,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
             <div className="text-[11px] font-medium text-slate-400">Market Decoupling Savings</div>
             <div className="text-sm font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
               <Sparkles className="w-3 h-3 text-emerald-400" />
-              <span>{totalAvoidedMarketTonnes.toFixed(1)} t avoided</span>
+              <span>{formatQuantity(totalAvoidedMarketTonnes, 1)} t avoided</span>
             </div>
           </div>
         </div>
@@ -613,7 +614,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, periods, onN
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
-                    label={(entry: any) => `${((entry.percent || 0) * 100).toFixed(0)}%`}
+                    label={(entry: any) => formatPercent((entry.percent || 0) * 100, 0)}
                     labelLine={false}
                   >
                     {categories.map((entry, index) => (

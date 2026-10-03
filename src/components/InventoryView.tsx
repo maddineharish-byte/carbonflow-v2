@@ -10,6 +10,7 @@ import { InventorySnapshot, ReportingPeriod } from '../types.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 import { api } from '../services/api.ts';
 import { hasPermission } from '../services/permissions.ts';
+import { formatQuantity } from '../services/format.ts';
 
 interface InventoryViewProps {
   periods: ReportingPeriod[];
@@ -215,9 +216,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ periods, permissio
                         {snapshot.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono">{snapshot.scope1Co2eT.toFixed(4)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-sky-400">{snapshot.scope2LocationCo2eT.toFixed(4)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-400">{snapshot.scope2MarketCo2eT.toFixed(4)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatQuantity(snapshot.scope1Co2eT, 4)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sky-400">{formatQuantity(snapshot.scope2LocationCo2eT, 4)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-emerald-400">{formatQuantity(snapshot.scope2MarketCo2eT, 4)}</td>
                     <td className="px-4 py-3 font-mono text-[10px] text-slate-400" title={snapshot.snapshotHash}>
                       {snapshot.snapshotHash.slice(0, 12)}…
                       {/* The truncated hash is not enough for an assistive

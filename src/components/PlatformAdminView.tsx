@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { OrganizationStatus, PlatformTenant } from '../types.ts';
 import { api } from '../services/api.ts';
+import { formatAuditInstant } from '../services/format.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
@@ -311,7 +312,7 @@ export const PlatformAdminView: React.FC = () => {
               {selected.statusChangedAt && (
                 <div>
                   <div className="text-slate-500 text-[10px] uppercase font-semibold">Status Changed</div>
-                  <div className="text-slate-200">{new Date(selected.statusChangedAt).toLocaleString()}</div>
+                  <div className="text-slate-200">{formatAuditInstant(selected.statusChangedAt)}</div>
                 </div>
               )}
               {selected.statusChangedBy && (
@@ -328,7 +329,7 @@ export const PlatformAdminView: React.FC = () => {
               )}
               <div>
                 <div className="text-slate-500 text-[10px] uppercase font-semibold">Created</div>
-                <div className="text-slate-200">{new Date(selected.createdAt).toLocaleString()}</div>
+                <div className="text-slate-200">{formatAuditInstant(selected.createdAt)}</div>
               </div>
             </div>
           )}

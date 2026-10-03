@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Database, Plus, Play, Paperclip, FileText } from 'lucide-react';
 import { ActivityDataItem, Facility, ReportingPeriod } from '../types.ts';
+import { formatInteger } from '../services/format.ts';
 import { Modal } from './Modal.tsx';
 
 interface ActivityDataViewProps {
@@ -211,7 +212,7 @@ export const ActivityDataView: React.FC<ActivityDataViewProps> = ({
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-300">{act.activityType}</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-white">
-                    {act.quantity.toLocaleString()}
+                    {formatInteger(act.quantity)}
                   </td>
                   <td className="px-4 py-3 text-slate-400">{act.unit}</td>
                   <td className="px-4 py-3">

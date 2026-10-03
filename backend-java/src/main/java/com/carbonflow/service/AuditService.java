@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -218,7 +219,12 @@ public class AuditService {
                     approvalSignatureHash(audit.getId(), userId, roleOf()));
         }
         if ("LOCKED".equals(target)) {
-            lockedAt = OffsetDateTime.now();
+            // Pinned to UTC rather than OffsetDateTime.now(), which reads the JVM
+            // default zone. The value lands in a `timestamptz` column so the
+            // stored instant is correct either way, but a host-zone-dependent
+            // offset means the textual form of an audit timestamp changes with
+            // where the process runs. An audit fact must not.
+            lockedAt = OffsetDateTime.now(ZoneOffset.UTC);
             String governanceHash = governanceStateHash(organizationId, auditId, audit);
             audits.insertLockEvent(audit.getId(), userId, governanceHash);
             reportingPeriods.updateStatus(organizationId, audit.getReportingPeriodId(),

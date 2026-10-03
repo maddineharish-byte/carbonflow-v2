@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Building2, Plus, Globe, Shield, Calendar } from 'lucide-react';
 import { Organization, Facility } from '../types.ts';
+import { formatInteger } from '../services/format.ts';
 import { Modal } from './Modal.tsx';
 
 interface BoundariesViewProps {
@@ -211,7 +212,7 @@ export const BoundariesView: React.FC<BoundariesViewProps> = ({
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-400">{fac.gridRegion}</td>
                     <td className="px-4 py-3 text-right font-medium text-slate-200">
-                      {fac.floorAreaM2 ? fac.floorAreaM2.toLocaleString() : '—'}
+                      {formatInteger(fac.floorAreaM2)}
                     </td>
                   </tr>
                 ))
