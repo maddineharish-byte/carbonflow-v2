@@ -1308,3 +1308,218 @@ Drill chain        selection -> isolated restore -> validation -> result -> noti
 **Document status: `IMPLEMENTED` (REC-02..REC-17); REC-13 scheduling exists but is DISABLED by default.**
 **Release state: `RELEASE CANDIDATE - FROZEN` (`d42af8b`).**
 **The approved RTO/RPO are validated for a local procedure, NOT for production.**
+---
+
+## 29. Phase 10.9 - cross-host scheduling exclusion (REC-13 hardening)
+
+### 29.1 What Phase 10.8 left open
+
+Phase 10.8 excluded overlapping backups with a single-JVM `AtomicBoolean`
+(`RecoveryBackupScheduler.running`). That guard is per process. Two application
+instances - two hosts, two containers, two JVMs - would each hold their own
+`false`, and both would run a full backup of the same database simultaneously.
+Phase 10.8 recorded this as an open limitation rather than claiming otherwise.
+
+Phase 10.9 closes it.
+
+### 29.2 Why a PostgreSQL advisory lock, not a lease row
+
+The obvious design is a lease table: owner, acquired-at, expires-at, a renewal
+loop and a sweeper to clear dead owners. That design has a failure mode that is
+easy to get wrong and expensive to get wrong *quietly*: if the owner dies
+between renewal ticks, the row still says "held" until it expires, so either
+backups are blocked for the whole expiry window, or the sweeper races the owner
+and two backups run.
+
+A PostgreSQL **session-level advisory lock** has neither problem, because the
+lock's lifetime *is* the session's lifetime:
+
+- the lock belongs to the **session**, not to a row;
+- PostgreSQL releases it the instant the session ends - clean close, `kill -9`,
+  JVM crash, dropped TCP connection, or loss of the machine;
+- `pg_try_advisory_lock` never blocks, so the losing host skips its cycle
+  immediately instead of queueing a second backup behind the first.
+
+Consequently there is **no expiry, no renewal and no sweeper to get wrong, and
+no window in which a dead owner still holds the lock.** That property is the
+entire reason for the choice.
+
+The lock key is a fixed project-specific constant (`0x4341424F4E464C57`,
+"CARBONFLW"), derived from the project name rather than from any value an
+operator supplies, so it cannot collide with another application using advisory
+locks on the same database.
+
+### 29.3 Behaviour when the database is unreachable
+
+`tryAcquireOrProceed` treats an unreachable database as **"may proceed"**, and
+this default is deliberate rather than convenient.
+
+The failure mode to avoid is refusing to back up *because the database is
+down* - which would make a database outage silently disable the control that
+exists to recover from that outage. Instead the run proceeds on the local guard,
+and the loss of cross-host exclusion is logged at WARN and reported. The
+alternative default (fail closed) is available by changing one call.
+
+This is a real trade-off, stated plainly: **if the lock cannot be checked, this
+run is not cross-host protected.** It is not claimed to be.
+
+### 29.4 Evidence, not assertion
+
+The claim is demonstrated by `PostgreSqlBackupLeaseTest` (4 tests, passing):
+
+| Test | What it proves |
+|---|---|
+| `twoInstancesCannotRunConcurrently` | A second, genuinely separate session is refused while the lease is held |
+| `leaseIsReleasedOnClose` | A released lease is immediately available again |
+| `crashedOwnerLeavesNoStaleLease` | An abandoned owner leaves nothing locked - no expiry, no sweeper, no manual cleanup |
+| `twoSchedulersAreMutuallyExcluded` | Two full `RecoveryBackupScheduler` instances contend for the real lock; the second returns `SKIPPED_OVERLAPPING` and observed peak concurrency is exactly **1** |
+
+The last test is the one that matters: it drives two complete schedulers, not
+two lock calls, and measures `maxConcurrent == 1` rather than inspecting a
+return value.
+
+### 29.5 Scope of the claim
+
+Cross-host exclusion is claimed **only** for the case actually demonstrated.
+
+What is verified: the advisory-lock **mechanism** works, and two independent
+scheduler instances with independent local guards contending for the same
+PostgreSQL instance never run concurrently (measured peak concurrency = 1).
+
+What is **not** verified: that behaviour across two genuinely separate hosts,
+processes or machines. The two-instance test runs both schedulers inside a
+single JVM, differing by database session. That exercises the exclusion
+correctly - the lock is enforced by PostgreSQL, not by the JVM - but it is not
+a two-host test, and no claim of two-host behaviour is made here.
+
+It is also **not** claimed for coordination with any other backup system, and
+it is not a general-purpose distributed lock.
+
+The local `AtomicBoolean` is retained as defence in depth behind the lease, not
+replaced by it.
+
+---
+
+## 30. Phase 10.9 - RPO margin analysis (no requirement changed)
+
+### 30.1 The arithmetic
+
+The approved requirement is **RPO 1 hour**. The approved schedule is **one
+backup per hour**. A backup taken at the top of each hour bounds data loss to
+the time since that backup completed.
+
+If the last successful backup completed exactly at 10:00:00 and the failure
+occurs at 10:59:59, the loss is 59 minutes 59 seconds - just inside the hour.
+**The worst case is therefore one full backup interval, which is exactly the
+entire RPO budget, leaving zero margin.**
+
+Concretely, three separate effects consume margin that does not exist:
+
+1. **Duration.** Loss is measured from backup *completion*, not its start. A
+   backup that takes `d` to run starts an hour late relative to the ideal
+   instant, so real worst-case loss approaches `interval` rather than falling
+   short of it.
+2. **In-progress runs.** A crash mid-backup yields the *previous* completed
+   set, adding a further `interval`.
+3. **Failed or skipped runs.** A failed run consumes its slot without producing
+   a set. Two consecutive failures put worst-case loss at ~2 intervals, i.e.
+   **double the approved RPO.**
+
+Point 3 is the material one: the RPO is not merely tight, it is **conditional on
+no consecutive failures**, and that condition is not currently met or monitored
+as an RPO statement.
+
+### 30.2 Options evaluated
+
+| Option | Effect on RPO | Cost / risk | Assessment |
+|---|---|---|---|
+| 30-minute backups | Worst case ~30 min, 2x margin | 2x storage, 2x DB load, 2x vault I/O | Strongest simple fix; doubles an already-unproven operational load |
+| 15-minute backups | ~15 min, 4x margin | 4x cost | Excessive at current evidence level |
+| Retain hourly, add an operational target | None — RPO unchanged | Documentation only | Honest, but leaves the arithmetic unchanged |
+| Hourly backups + **monitored staleness alarm** | None to the RPO itself | Small | Does not reduce loss; only makes it *visible* sooner |
+
+### 30.3 Decision: change nothing, escalate the question
+
+**No configuration was changed.** The RPO and the backup interval are both
+approved project-level requirements, and altering the interval to manufacture
+margin would be silently changing an approved requirement - which is precisely
+what Phase 10.9 was instructed not to do.
+
+What Phase 10.9 does instead:
+
+1. **Records the zero-margin finding explicitly** so it cannot be mistaken for
+   headroom.
+2. **Notes that the RPO is currently unproven as a statement**, because it
+   depends on the no-consecutive-failures condition.
+3. **Recommends** that the project decide between (a) approving a shorter
+   interval, and (b) approving a separate operational staleness target distinct
+   from the RPO.
+
+The measured RPO from Phase 10.8 (0 s committed loss) is a **single local
+observation on a near-empty development database**. It is not evidence about
+worst-case behaviour under load or during failure, and it does not retire this
+finding.
+
+---
+
+## 31. Phase 10.9 - quiescence (REC-05): limitation confirmed, not closed
+
+### 31.1 Current state
+
+`QuiesceGuard.NoOp` is used by the coordinated snapshot. It writes nothing,
+blocks nothing and pauses nothing. Phase 10.8 recorded this honestly as
+"databases were NOT quiesced" rather than claiming otherwise.
+
+### 31.2 Why it was not implemented in Phase 10.9
+
+Real quiescence requires the application to **stop accepting writes** for the
+duration of the snapshot and to resume reliably afterwards. That means
+intercepting the request path of the live application.
+
+Doing so would change CarbonFlow business behaviour — write availability, and
+by extension the availability semantics of every write endpoint. Phase 10.9 is
+explicitly forbidden from making business-logic changes, so implementing
+quiescence here was not available without breaching the phase boundary.
+
+This is a **scope constraint, not an engineering estimate.** The work is
+feasible; it simply belongs to a phase authorised to change request handling.
+
+### 31.3 Exact limitation
+
+During a coordinated snapshot:
+
+- new writes are **NOT** blocked;
+- the backup is **NOT** transactionally consistent with concurrent writes in the
+  strict sense - `pg_dump` uses a snapshot taken at dump start, so rows
+  modified after that instant may reflect post-snapshot values;
+- the database remains fully available and writable throughout.
+
+The coordinated backup is therefore **crash-consistent**, not
+**quiesce-consistent**.
+
+### 31.4 What this does and does not invalidate
+
+Nothing in REC-02..REC-17 depends on quiescence. The consistency that matters to
+recovery is the **database + vault boundary** (`earlier(databaseSnapshotAt,
+vaultSnapshotAt)`), which is recorded in the manifest and is unaffected.
+
+The honest statement, which the runbook and the manifest both carry:
+
+> **The coordinated backup is NOT quiesced. The snapshot is crash-consistent,
+> not point-in-time consistent.**
+
+### 31.5 If this is ever implemented, it must
+
+- pause only writes, never reads, so read availability is preserved;
+- release on **every** exit path, including interruption and crash, with no
+  path that can leave the application permanently read-only;
+- avoid deadlocks - a quiesce guard must never hold a database lock while
+  waiting for in-flight transactions that themselves need that lock;
+- be tested for interruption mid-snapshot.
+
+---
+
+**Document status: `IMPLEMENTED` (REC-02..REC-17); REC-13 cross-host exclusion mechanism `VERIFIED` by two-instance test in a single JVM; two-host behaviour `NOT VERIFIED`; REC-05 quiescence remains a documented limitation.**
+**Release state: `RELEASE CANDIDATE - FROZEN` (`d42af8b`).**
+**The approved RTO/RPO are validated for a local procedure, NOT for production.**
+**The approved RPO has ZERO worst-case margin against the hourly interval (§30) - this is an open finding.**

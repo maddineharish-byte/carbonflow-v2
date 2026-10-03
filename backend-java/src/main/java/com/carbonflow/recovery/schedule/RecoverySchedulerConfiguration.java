@@ -272,6 +272,16 @@ public class RecoverySchedulerConfiguration {
         // contracts. The coordinator is invoked with the no-op quiesce guard, which
         // is recorded honestly in the manifest: writes are not being blocked
         // during an automated backup.
+        // Cross-host exclusion via a PostgreSQL advisory lock. The lease falls back
+        // to "proceed on local guard only" if the database cannot be reached, which
+        // is logged loudly rather than silently assumed, because refusing to back
+        // up during a database outage would be worse.
+        com.carbonflow.recovery.postgres.PostgreSqlBackupTarget leaseTarget =
+                com.carbonflow.recovery.postgres.PostgreSqlBackupTarget
+                        .fromEnvironment(System.getenv());
+        log.info("Cross-host backup exclusion: PostgreSQL advisory lock on {}",
+                leaseTarget.host() + ":" + leaseTarget.port());
+
         return new RecoveryBackupScheduler(
                 request -> coordinator.run(request,
                         new com.carbonflow.recovery.coordination.QuiesceGuard.NoOp()),
@@ -297,6 +307,9 @@ public class RecoverySchedulerConfiguration {
                 config,
                 Clock.systemUTC(),
                 notifier == null ? null
-                        : notification -> notifier.notify(notification));
+                        : notification -> notifier.notify(notification),
+                () -> PostgreSqlBackupLease.tryAcquireOrProceed(leaseTarget.host(),
+                        leaseTarget.port(), "postgres", leaseTarget.username(),
+                        leaseTarget.password()));
     }
 }

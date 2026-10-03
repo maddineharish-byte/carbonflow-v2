@@ -956,3 +956,80 @@ results and the gaps in `docs/RECOVERY-CONTROLS-DESIGN.md` §27.**
 > has not been configured is not silently backing up anything. The approved
 > targets themselves are unchanged, and remain **project-level requirements, not a
 > contractual SLA**. Operator procedure is in `docs/BACKUP-RECOVERY.md` §8.
+---
+
+## 16. Phase 10.9 hardening findings against the approved requirements
+
+Audit date 2026-10-03. This section **adds findings only**. It changes no
+approved requirement (§10) and supersedes nothing above.
+
+### 16.1 Requirements whose standing improved
+
+| Requirement | Before 10.9 | After 10.9 |
+|---|---|---|
+| Hourly scheduled backup (REC-13) | Single-JVM exclusion only; two hosts could run concurrently | Exclusion enforced by PostgreSQL advisory lock; two-instance concurrency measured at 1 |
+
+### 16.2 New findings - these reduce confidence, they do not improve it
+
+**F-10.9-1 - RPO has zero worst-case margin. `OPEN`.**
+The approved RPO (1 hour) equals the approved interval (1 hour). Worst-case
+loss approaches the full interval, and two consecutive failed backup runs put it
+at roughly double the approved RPO. The RPO is therefore conditional on a
+no-consecutive-failures condition that is not itself established or monitored.
+**No configuration was changed**, because both figures are approved requirements.
+Requires a project decision. Detail: RECOVERY-CONTROLS-DESIGN.md §30.
+
+**F-10.9-2 - Backups are not quiesced. `OPEN`, by scope.**
+The coordinated snapshot uses `QuiesceGuard.NoOp`. New writes are not blocked
+during a snapshot, so the dump is **crash-consistent, not point-in-time
+consistent**. Implementing real quiescence requires intercepting the write path
+of the live application, which Phase 10.9 was not permitted to change. The
+database + vault boundary is unaffected. Detail: §31.
+
+**F-10.9-3 - Cross-host exclusion verified in one JVM, not across two hosts. `PARTIAL`.**
+The advisory-lock mechanism is demonstrated by two independent schedulers with
+independent local guards contending for the same PostgreSQL instance, with
+measured peak concurrency of 1. The test runs both schedulers in a single JVM
+(differing by database session). Two genuinely separate hosts were not tested.
+No two-host claim is made.
+
+**F-10.9-4 - Backup lock degrades open when the database is unreachable. `ACCEPTED, DOCUMENTED`.**
+If the advisory lock cannot be acquired *because the database is unreachable*,
+the run proceeds on the local guard and logs a WARN. Rationale: refusing to back
+up during a database outage would disable recovery from that very outage. The
+trade-off is that such a run is not cross-host protected, and this is stated
+rather than assumed.
+
+**F-10.9-5 - Dependency currency not verifiable offline. `OPEN`.**
+Spring Boot 3.3.3 is the declared parent. The Maven dependency plugin cannot
+resolve in offline mode, so **no transitive CVE scan was possible in this
+environment**. No dependency was upgraded - upgrading blind is explicitly out of
+scope, and any upgrade must pass the full regression suite. Dependency currency
+requires a network-enabled run of an advisory scanner. This is an unverified
+area, not a clean result.
+
+**F-10.9-6 - Database TLS default permits silent downgrade. `OPEN, DOCUMENTED`.**
+`carbonflow.db.ssl-mode` defaults to `prefer`, which permits a silent fallback to
+plaintext. This is documented in-application as development-only and not safe for
+production, where `verify-ca` / `verify-full` must be set explicitly. Left
+unchanged: changing the default would break existing local development.
+
+### 16.3 Confirmed sound during the audit
+
+- Every organisation-scoped query filters on `organization_id`; no request value
+  reaches SQL text; no dynamically constructed `ORDER BY`.
+- HS256 JWT with an enforced 256-bit minimum secret and a 15-minute TTL;
+  fail-closed at startup when the secret is absent or short.
+- BCrypt login with timing equalisation, which prevents account enumeration
+  through response latency.
+- Query-string token authentication removed and confirmed refused (401).
+- No hardcoded country, currency, timezone, locale, database password,
+  production URL or hostname; CORS has no permissive default and refuses to
+  start on a wildcard-with-credentials combination.
+- No stack traces, SQL text or driver detail returned to clients; errors use the
+  typed envelope.
+- Flyway V1-V8 byte-identical to the frozen baseline `d42af8b`; no V9.
+- Tenant isolation re-probed adversarially against two real tenants: cross-tenant
+  reads refused 403/404, response bodies free of tenant B content, cross-tenant
+  writes refused with the target row intact afterwards, and each tenant still
+  reads its own data.

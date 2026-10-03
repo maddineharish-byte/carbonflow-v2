@@ -64,8 +64,18 @@ public final class RecoveryBackupScheduler {
     private final java.util.function.Consumer<
             com.carbonflow.recovery.notify.RecoveryNotification> notifier;
 
-    /** Single-instance guard. See the class note on its limits. */
+    /** Single-instance guard. Retained as defence in depth behind the lease. */
     private final AtomicBoolean running = new AtomicBoolean(false);
+
+    /**
+     * Cross-host exclusion, optional.
+     *
+     * <p>When supplied, a run must hold this lease as well as the local guard, so
+     * two hosts cannot back up the same database simultaneously. When absent the
+     * scheduler falls back to single-JVM exclusion only, and says so — it never
+     * claims cross-host protection it does not have.
+     */
+    private final java.util.function.Supplier<AutoCloseable> backupLeaseSupplier;
     private final AtomicReference<Outcome> lastOutcome = new AtomicReference<>();
     private final AtomicReference<Instant> lastRunStartedAt = new AtomicReference<>();
 
@@ -133,6 +143,20 @@ public final class RecoveryBackupScheduler {
                                    java.util.function.Consumer<
                                            com.carbonflow.recovery.notify.RecoveryNotification>
                                            notifier) {
+        this(backupPerformer, verifier, monitor, retention, config, clock, notifier, null);
+    }
+
+    public RecoveryBackupScheduler(RecoveryCycleDependencies.BackupPerformer backupPerformer,
+                                   RecoveryCycleDependencies.SetVerifier verifier,
+                                   RecoveryCycleDependencies.HealthReporter monitor,
+                                   RecoveryCycleDependencies.RetentionSweeper retention,
+                                   RecoveryScheduleConfig config,
+                                   Clock clock,
+                                   java.util.function.Consumer<
+                                           com.carbonflow.recovery.notify.RecoveryNotification>
+                                           notifier,
+                                   java.util.function.Supplier<AutoCloseable>
+                                           backupLeaseSupplier) {
         this.backupPerformer = backupPerformer;
         this.verifier = verifier;
         this.monitor = monitor;
@@ -140,6 +164,12 @@ public final class RecoveryBackupScheduler {
         this.config = config;
         this.clock = clock;
         this.notifier = notifier;
+        this.backupLeaseSupplier = backupLeaseSupplier;
+    }
+
+    /** Whether cross-host exclusion is configured. */
+    public boolean hasCrossHostExclusion() {
+        return backupLeaseSupplier != null;
     }
 
     /**
@@ -164,6 +194,32 @@ public final class RecoveryBackupScheduler {
         Instant startedAt = clock.instant();
         lastRunStartedAt.set(startedAt);
         monitor.recordRunStarted();
+
+        // Cross-host exclusion is a second gate behind the local guard. A null
+        // lease means another host holds it, or the lease could not be checked;
+        // either way this run must not proceed.
+        AutoCloseable lease = null;
+        if (backupLeaseSupplier != null) {
+            try {
+                lease = backupLeaseSupplier.get();
+            } catch (RuntimeException e) {
+                log.error("Cross-host backup lease check failed; refusing to run a "
+                        + "backup that cannot be excluded: {}", e.getMessage());
+                monitor.recordRunFinished(false, null,
+                        "cross-host lease check failed: " + e.getMessage());
+                return record(new Outcome(Outcome.Status.FAILED, null,
+                        "cross-host lease check failed: " + e.getMessage(),
+                        clock.instant(), null, null));
+            }
+            if (lease == null) {
+                monitor.recordRunFinished(false, null,
+                        "another host holds the cross-host backup lease");
+                return record(new Outcome(Outcome.Status.SKIPPED_OVERLAPPING, null,
+                        "another host holds the cross-host backup lease",
+                        clock.instant(), null, null));
+            }
+        }
+
         try {
             var backup = backupPerformer.perform(new RecoverySetCoordinator.Request(
                     job.backupRoot(), job.vaultRoot(), job.target(), job.environment(),
@@ -216,6 +272,16 @@ public final class RecoveryBackupScheduler {
 
         } finally {
             running.set(false);
+            // Releasing the lease closes its session, which releases the advisory
+            // lock even if this were to fail part-way.
+            if (lease != null) {
+                try {
+                    lease.close();
+                } catch (Exception e) {
+                    log.warn("Releasing the cross-host backup lease reported {}; the "
+                            + "session close releases it regardless", e.getMessage());
+                }
+            }
         }
     }
 

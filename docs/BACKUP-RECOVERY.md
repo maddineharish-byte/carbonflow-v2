@@ -576,6 +576,35 @@ Recovery notifications enabled with provider(s) [structured-log] (out-of-band de
 If recovery notifications are **not** configured, that second line will say so.
 A backup that fails will then be visible only in the log.
 
+### 8.1a Concurrent-run exclusion (added Phase 10.9)
+
+A backup run must hold **two** gates, not one:
+
+1. a per-process guard, which stops two runs overlapping inside one JVM; and
+2. a **PostgreSQL advisory lock**, which stops two runs overlapping across
+   different application instances.
+
+The second gate is held for the duration of the run on a dedicated database
+session. Because a session-level advisory lock dies with its session, a crashed
+or killed backup host releases it automatically - there is no lock expiry to
+wait out and no manual cleanup step.
+
+Operational consequences:
+
+| Log line | Meaning | Action |
+| --- | --- | --- |
+| `another host holds the cross-host backup lease` | Another instance is already backing up. **This run was skipped deliberately** | None. This is correct behaviour, not a failure |
+| `Cross-host backup lease unavailable (...)` | The lock could not be checked, usually because the database was unreachable. The run proceeded on the per-process guard only | Investigate connectivity. **That run was not cross-host protected** |
+
+The second row is a deliberate trade-off, not an oversight: refusing to back up
+because the database is down would disable recovery from that very outage. The
+cost is that such a run has no cross-host exclusion, and it is logged rather
+than assumed.
+
+Exclusion has been demonstrated by a two-instance test against a real
+PostgreSQL server. It has **not** been tested across two separate machines - see
+`RECOVERY-CONTROLS-DESIGN.md` §29.5.
+
 ### 8.2 Daily check
 
 Roughly a minute, once a day:
