@@ -13,7 +13,7 @@ interface AuthBoundaryProps {
 export const AuthBoundary: React.FC<AuthBoundaryProps> = ({ state, isLoading, error, onLogin, children }) => {
   if (state === 'AUTH_LOADING') {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-sm text-slate-400" role="status">
+      <main className="flex min-h-screen items-center justify-center bg-sand-50 px-4 text-sm text-ink-500" role="status">
         Checking authenticated session…
       </main>
     );

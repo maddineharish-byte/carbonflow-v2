@@ -79,3 +79,39 @@ CarbonFlow is designed with enterprise-grade multi-tenancy, clean domain separat
 | **Calculation Engine** | Deterministic Decimal (Java `BigDecimal`) | 8-decimal precision, ROUND_HALF_UP, in `GhgCalculationEngine` |
 | **Relational Database** | PostgreSQL | Schema migrations with Flyway naming standard (`V1__...`, `V8__...`), applied at startup |
 | **Storage** | Private filesystem evidence vault | Multi-part uploads, SHA-256 hashing, 25 MB file limit |
+
+---
+
+## 4. Public Website & Entry-Layer Routing
+
+```text
+PUBLIC WEBSITE
+      │ Get Started                      ┌──────────────────────┐
+      ├────────────────────────────────▶ │ REGISTER (/register) │ POST /api/v1/auth/register
+      │                                  │ PENDING_ACTIVATION   │ no tokens issued
+      │                                  └─────────┬────────────┘
+      │                                            │ Platform Admin approval
+      │                                            ▼
+      │ Sign In                          ┌──────────────────────┐
+      └────────────────────────────────▶ │ LOGIN (/login)       │ POST /api/v1/auth/login
+                                         └─────────┬────────────┘
+                                                   ▼
+                                     AUTHENTICATED WORKSPACE (/dashboard, …)
+```
+
+- The public website lives in `src/components/public/` and is routed by
+  `src/services/router.ts` (history API, no router dependency). Public pages
+  are static: they issue no API call and read no session.
+- `/login` and `/register` render the **existing** LoginView and the existing
+  `POST /api/v1/auth/register` client method (`api.register`). No second
+  authentication or registration implementation exists.
+- Private paths (`/dashboard`, `/organization`, `/activity`, `/calculations`,
+  `/emissions`, `/audits`, `/evidence`, `/reports`, `/admin`, …) map to the
+  existing `NavView` state. Unauthenticated requests to them are replaced with
+  `/login` before any workspace content can render.
+- Unknown paths render the public 404 page and never enter the workspace.
+- Registration, approval, activation and sign-in preserve the existing
+  business flow: `PENDING_ACTIVATION → Platform Admin review → Approval →
+  Activation → Login → Dashboard`. No client path can activate an organization.
+- The public website adds no routes, endpoints, or tables to the backend. No
+  Flyway migration was added; V1–V9 are unchanged.

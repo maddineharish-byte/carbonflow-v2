@@ -25,3 +25,8 @@ drill-vault/
 
 # Local tool state (agent skills etc.)
 .opencode/
+
+# Decommissioned Node/Express remnants (Phase 10.5) — never commit
+server.ts
+server/
+bun.lock

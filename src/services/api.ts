@@ -200,6 +200,33 @@ export const api = {
       body: JSON.stringify({ email, password, organizationId }),
     }),
 
+  /**
+   * Public organization registration — the client for the EXISTING
+   * `POST /auth/register` endpoint (ADR-014), not a second signup path.
+   *
+   * The endpoint creates the organization as PENDING_ACTIVATION together with
+   * its COMPANY_ADMIN user and returns NO tokens, so this call must never be
+   * followed by a session write. Approval is performed by a platform
+   * administrator; the client cannot and does not activate the organization.
+   */
+  register: (input: {
+    organizationName: string;
+    country?: string;
+    industry?: string;
+    taxId?: string;
+    fullName: string;
+    email: string;
+    password: string;
+  }) =>
+    request<{ user: { id: string; email: string; fullName: string }; organization: Record<string, unknown> }>(
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      false,
+    ),
+
   switchTenantOrRole: (targetOrgId: string, targetRole: string) =>
     request<any>('/auth/switch-tenant-or-role', {
       method: 'POST',

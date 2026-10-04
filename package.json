@@ -10,7 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "npm run test:frontend",
-    "test:frontend": "node --import tsx --test src/auth-boundary.test.tsx src/api-refresh.test.ts src/auth-flow.test.ts src/integration.test.tsx src/accessibility.test.tsx src/globalization.test.ts"
+    "test:frontend": "node --import tsx --test src/auth-boundary.test.tsx src/api-refresh.test.ts src/auth-flow.test.ts src/integration.test.tsx src/accessibility.test.tsx src/globalization.test.ts src/public-website.test.tsx"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

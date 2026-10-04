@@ -3,19 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CarbonFlow — Enterprise Carbon Accounting & GHG Management</title>
-    <meta name="description" content="Enterprise Carbon Accounting, GHG Management, Audit Preparation, Evidence Management, Inventory, Analytics, Targets & Reduction Projects SaaS." />
-    <meta property="og:title" content="CarbonFlow — Enterprise Carbon Accounting & GHG Management" />
-    <meta property="og:description" content="Enterprise Carbon Accounting, GHG Management, Audit Preparation, Evidence Management, Inventory, Analytics, Targets & Reduction Projects SaaS." />
+    <!--
+      Landing-page metadata. The public site is a single-document application, so
+      these values are rewritten per route on navigation (see usePageMeta in
+      src/services/router.ts). They are declared here so the very first paint —
+      and any client that does not run scripts — sees the correct values for the
+      canonical entry point.
+    -->
+    <title>CarbonFlow — Enterprise Carbon Accounting &amp; GHG Management</title>
+    <meta name="description" content="CarbonFlow is an enterprise greenhouse gas management platform: carbon and activity data, evidence management, deterministic calculations, audit preparation, findings and corrective actions, compliance tracking, and reporting." />
+    <meta property="og:title" content="CarbonFlow — Enterprise Carbon Accounting &amp; GHG Management" />
+    <meta property="og:description" content="CarbonFlow is an enterprise greenhouse gas management platform: carbon and activity data, evidence management, deterministic calculations, audit preparation, findings and corrective actions, compliance tracking, and reporting." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased font-sans">
+  <body class="bg-sand-50 text-ink-900 antialiased font-sans">
     <div id="root"></div>
+    <noscript>
+      <!--
+        The public website and the authenticated workspace are both React
+        applications and require JavaScript. This message is intentionally
+        minimal: it names the entry points and discloses nothing else.
+      -->
+      <div style="max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+        <h1 style="font-size: 1.5rem; margin-bottom: 1rem;">CarbonFlow requires JavaScript</h1>
+        <p style="color: #94a3b8;">
+          The CarbonFlow website and workspace are single-page applications and cannot be
+          rendered without JavaScript enabled. Please enable JavaScript and reload this page.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

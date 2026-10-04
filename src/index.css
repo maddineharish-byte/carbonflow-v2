@@ -1,41 +1,91 @@
 @import "tailwindcss";
 
 /*
- * CarbonFlow — Phase 10.11 accessibility hardening (global base layer)
+ * CarbonFlow — Public website design tokens (Phase: public-site redesign).
  *
- * 1. Visible focus. The component library predates this phase and uses
- *    `focus:outline-none` on nearly every control (it relied on a border-colour
- *    change instead). `!important` is required here: `focus:outline-none`
- *    compiles to `.focus\:outline-none:focus` (specificity 0,2,0), which would
- *    otherwise beat any `:focus-visible` rule on equal footing. Keyboard focus
- *    must never be invisible.
- * 2. `prefers-reduced-motion` — the dashboard and audit views animate spinners,
- *    pulses and charts.
+ * Aesthetic: minimal enterprise SaaS. Restrained "carbon green" on a warm
+ * neutral, near-black ink for text, and a single confident CTA treatment. The
+ * palette mirrors the product's domain — carbon, evidence, governance — without
+ * resorting to neon, loud gradients, or marketing illustration.
+ *
+ * The authenticated workspace (slate-950) is intentionally untouched; the public
+ * entry layer does not need to inherit that canvas.
  */
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Surfaces — warm, near-white */
+  --color-sand-50: #FAF9F6;
+  --color-sand-100: #F4F2EC;
+  --color-sand-200: #EAE7DD;
+  --color-surface: #FFFFFF;
+
+  /* Ink — charcoal / near-black, still readable */
+  --color-ink-950: #141A16;
+  --color-ink-900: #1B2420;
+  --color-ink-700: #37453E;
+  --color-ink-500: #5C6B63;
+  --color-ink-400: #83908A;
+
+  /* Muted support neutrals */
+  --color-line: #E5E2D9;
+  --color-line-strong: #D5D1C5;
+
+  /* Carbon green — restrained, natural, no neon */
+  --color-brand-50: #F0F6F1;
+  --color-brand-100: #DFECE2;
+  --color-brand-200: #C2DCC8;
+  --color-brand-300: #9FC4AB;
+  --color-brand-400: #6FA287;
+  --color-brand-500: #4C8566;
+  --color-brand-600: #356D4C;
+  --color-brand-700: #2A5A3E;
+  --color-brand-800: #214832;
+  --color-brand-900: #193827;
+  --color-brand-950: #0E2A1D;
+
+  /* Accent — a slightly warmer deep green for CTAs and status */
+  --color-accent: #1E6B45;
+  --color-accent-strong: #175738;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+}
+
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-sand-50);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-950);
+  }
+
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible,
-  summary:focus-visible,
-  [role="button"]:focus-visible,
-  [role="tab"]:focus-visible,
-  [tabindex="0"]:focus-visible {
-    outline: 2px solid #34d399 !important;
+  [role="tab"]:focus-visible {
+    outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
-    border-radius: 4px;
-  }
-
-  /* Date/number inputs render their native spinners in near-black on the dark
-     CarbonFlow surface, which makes them effectively invisible. */
-  input[type="date"]::-webkit-calendar-picker-indicator,
-  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-  input[type="month"]::-webkit-calendar-picker-indicator,
-  input[type="time"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    opacity: 0.7;
-    cursor: pointer;
+    border-radius: 6px;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -48,4 +98,7 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* Date/number inputs render their native spinners in near-black on dark
+     surfaces only; on the light public canvas the default is readable. */
 }

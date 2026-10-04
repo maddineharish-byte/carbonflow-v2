@@ -1,0 +1,39 @@
+-- CarbonFlow V10: evidence_links lookup index (Phase 10.10)
+--
+-- Justification, from measured query behavior on the Phase 10.10 synthetic
+-- dataset (see docs/PHASE10.10-PERFORMANCE.md):
+--
+--   GET /api/v1/activity-data issues, for every activity row, a correlated
+--   LATERAL subquery of the form
+--       WHERE el.entity_type = 'ACTIVITY_DATA' AND el.entity_id = a.id
+--   (see ActivityDataRepository).  Before this migration the only index on
+--   evidence_links was its primary key on (id), so each of the N activity rows
+--   triggered a full sequential scan of evidence_links (M rows): O(N * M)
+--   row examinations for that single statement.
+--
+--   Measured on the large dataset (100,000 activities, 25,000 evidence links):
+--       EXPLAIN (ANALYZE) of the verbatim repository statement:  478,246 ms
+--       same statement with the LATERAL removed:                     528 ms
+--   i.e. a ~906x cost attributable to that join's lack of an access path.
+--
+--   After this index, the same statement executes as an index-only probe per
+--   activity row.  Re-measured (see report): cost returns to the statement's
+--   inherent list-materialization cost rather than the quadratic scan.
+--
+-- Allowing multiple evidence records per activity is intentional in the model,
+-- so this index is deliberately NOT unique (an activity can carry more than one
+-- evidence item; the LATERAL/query then picks deterministically by creation
+-- time).  The columns are ordered (entity_type, entity_id) because every caller
+-- predicates on both, with entity_type first for selectivity.
+--
+-- Note: V9 of this file was originally numbered such, but the Phase 10.12
+-- globalization work claimed the same version number (V9) independently.
+-- This migration is the evidence-backed index and takes the next free version.
+CREATE INDEX idx_evidence_links_entity ON evidence_links (entity_type, entity_id);
+
+-- Companion index for the reverse direction used by EvidenceRepository when it
+-- lists the activities linked to a given record. Quote from the code path: the
+-- repository looks up links by evidence_record_id; that column is covered by the
+-- (entity_type, entity_id) index only as a second key, so when that lookup
+-- becomes hot a dedicated index would be justified. It is not added here because
+-- Phase 10.10 measured no query in which it changes the chosen plan.

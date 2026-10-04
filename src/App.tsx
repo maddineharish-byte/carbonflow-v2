@@ -1,5 +1,26 @@
 /**
- * CarbonFlow — Enterprise GHG Accounting & Audit SaaS Platform
+ * CarbonFlow — Public entry layer + authenticated GHG workspace.
+ *
+ * The authenticated application below is unchanged: the same `AuthBoundary`,
+ * the same session handling, the same `NavView` state, the same handlers. What
+ * was added is the public entry layer in front of it.
+ *
+ * Route families and who may see them:
+ *
+ *   PUBLIC   /, /product, /features, /how-it-works, /security, /compliance,
+ *            /technology, /documentation, /about, /contact
+ *            -> rendered by `PublicSite`. Static, session-free, and it never
+ *               reaches the authenticated tree.
+ *   ENTRY    /login (the EXISTING LoginView), /register (the EXISTING backend
+ *            POST /auth/register).
+ *   PRIVATE  /dashboard, /organization, /activity, ... -> `AuthBoundary` and the
+ *            workspace. Unauthenticated, these redirect to /login and never
+ *            render workspace content.
+ *   UNKNOWN  anything else -> public 404, always, authenticated or not.
+ *
+ * Session restore deliberately does NOT run on public marketing pages: that is
+ * what keeps the landing page free of authenticated API traffic and independent
+ * of any session.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
@@ -19,6 +40,20 @@ import { AnalyticsView } from './components/AnalyticsView.tsx';
 import { AdminView } from './components/AdminView.tsx';
 import { PlatformAdminView } from './components/PlatformAdminView.tsx';
 import { AuthBoundary } from './components/AuthBoundary.tsx';
+import { LoginView } from './components/LoginView.tsx';
+import { RegisterView } from './components/RegisterView.tsx';
+import { PublicSite } from './components/public/PublicSite.tsx';
+import { PublicLayout, PublicLink } from './components/public/PublicLayout.tsx';
+import { usePageMeta } from './services/router.ts';
+import {
+  isEntryPath,
+  isPrivatePath,
+  navigate,
+  pathForView,
+  privateViewFor,
+  shouldRestoreSession,
+  usePathname,
+} from './services/router.ts';
 
 import {
   api,
@@ -57,7 +92,37 @@ const VIEW_TITLES: Record<NavView, string> = NAV_ITEMS.reduce(
   {} as Record<NavView, string>,
 );
 
+/**
+ * Per-page metadata for the two entry paths.
+ *
+ * These are separate components rather than inline calls because `App` runs its
+ * hooks unconditionally — the public branch is a conditional *return*, and a
+ * hook cannot live inside one.
+ */
+const RegisterMeta: React.FC = () => {
+  usePageMeta(
+    'Register Your Organization — CarbonFlow',
+    'Register your organization with CarbonFlow. The organization is created in a pending state and reviewed by a platform administrator before any account can sign in.',
+  );
+  return null;
+};
+
+const LoginMeta: React.FC = () => {
+  usePageMeta(
+    'Sign In — CarbonFlow',
+    'Sign in to your organization’s CarbonFlow greenhouse gas workspace using the credentials issued for your approved organization.',
+  );
+  return null;
+};
+
 export default function App() {
+  // Public entry layer: the current location decides which branch renders. The
+  // authenticated workspace still owns its own state; the URL is a deep-link
+  // deep-link surface into that same state, not a replacement for it.
+  const path = usePathname();
+  const isPublicEntry = !isEntryPath(path) && !isPrivatePath(path);
+  const isPrivateRoute = isPrivatePath(path);
+
   const [authState, setAuthState] = useState<AuthState>('AUTH_LOADING');
   const [authError, setAuthError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<NavView>('DASHBOARD');
@@ -239,7 +304,14 @@ export default function App() {
   }, [clearFrontendSession]);
 
   // Validate an existing browser token against the backend before restoring state.
+  //
+  // Public marketing pages skip this entirely: `shouldRestoreSession` is false
+  // for them, so the landing page issues no authenticated request and works
+  // with no session at all. `/login`, `/register` and every private path do
+  // restore, because they must know whether a session already exists.
   useEffect(() => {
+    if (!shouldRestoreSession(path)) return;
+
     let active = true;
 
     const restoreSession = async () => {
@@ -267,7 +339,40 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [applyAuthSession, clearFrontendSession, loadTenantData]);
+  }, [applyAuthSession, clearFrontendSession, loadTenantData, path]);
+
+  // Route synchronisation. Three rules, and no others:
+  //
+  //   1. A private path the session does not authorise is replaced with
+  //      /login. It must never render workspace content.
+  //   2. An authenticated visitor on an entry path continues to the existing
+  //      dashboard rather than being asked to sign in again.
+  //   3. A private path selects the workspace view it names, so a bookmarked
+  //      deep link opens the right section.
+  useEffect(() => {
+    if (isPrivateRoute && authState === 'UNAUTHENTICATED') {
+      navigate('/login', { replace: true });
+    }
+  }, [authState, isPrivateRoute, path]);
+
+  useEffect(() => {
+    if (isEntryPath(path) && authState === 'AUTHENTICATED') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [authState, path]);
+
+  useEffect(() => {
+    const view = privateViewFor(path);
+    if (view) setCurrentView(view);
+  }, [path]);
+
+  // Workspace navigation keeps the address bar honest. The canonical path is
+  // written on navigation, so a deep link and a sidebar click converge on the
+  // same URL and the mapping above cannot oscillate between aliases.
+  const handleSelectView = useCallback((view: NavView) => {
+    setCurrentView(view);
+    navigate(pathForView(view));
+  }, []);
 
   const handleLogin = async (email: string, password: string) => {
     setAuthError(null);
@@ -304,6 +409,10 @@ export default function App() {
       // refresh session has already been revoked.
     } finally {
       clearFrontendSession();
+      // Sign-out lands on the existing sign-in page, which is exactly what the
+      // application showed before the public entry layer existed. The public
+      // landing page is one link away.
+      navigate('/login', { replace: true });
     }
   };
 
@@ -592,6 +701,70 @@ export default function App() {
     }
   };
 
+  // ------------------------------------------------------------------
+  // Public entry layer
+  // ------------------------------------------------------------------
+  //
+  // Public marketing pages and unknown paths render here and nowhere else.
+  // `PublicSite` makes no API call and holds no session state, so this branch
+  // cannot expose tenant data even in principle. Unknown paths render the
+  // public 404 rather than falling through to the workspace.
+
+  if (isPublicEntry) {
+    return <PublicSite path={path} />;
+  }
+
+  // Registration is a public entry point that needs no session. It is gated only
+  // on the authenticated redirect above, so an already-signed-in visitor is sent
+  // to the dashboard instead of being offered a second signup.
+
+  if (path === '/register') {
+    return (
+      <PublicLayout currentPath={path}>
+        <RegisterMeta />
+        <RegisterView />
+      </PublicLayout>
+    );
+  }
+
+  if (path === '/login') {
+    return (
+      <PublicLayout currentPath={path} childProvidesMain>
+        <LoginMeta />
+        {/* The EXISTING LoginView, unmodified. `childProvidesMain` stops the
+            shell rendering a second <main>, and the wrapper neutralises the
+            view's full-screen min-height so the public header and footer fit
+            around it. No second login form exists. */}
+        <div className="flex flex-1 flex-col [&>main]:min-h-0 [&>main]:flex-1 [&>main]:bg-transparent [&>main]:py-8 [&>main]:font-sans">
+          <LoginView onLogin={handleLogin} isLoading={isLoading} error={authError} />
+          <div className="mx-auto w-full max-w-md px-4 pb-10 text-center text-xs text-slate-500">
+            New to CarbonFlow?{' '}
+            <PublicLink to="/register" className="font-semibold text-emerald-400 underline">
+              Create your organization
+            </PublicLink>
+          </div>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  // A private path with no authorised session must not render workspace content.
+  // The redirect effect above replaces the address with /login; this branch
+  // renders an announced status in the meantime so no frame can flash the
+  // dashboard to an unauthenticated visitor.
+
+  if (isPrivateRoute && authState !== 'AUTHENTICATED') {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-sand-50 px-4 text-sm text-ink-500"
+        role="status"
+        data-testid="private-route-redirect"
+      >
+        Redirecting to sign in…
+      </main>
+    );
+  }
+
   return (
     <AuthBoundary
       state={authState}
@@ -627,7 +800,7 @@ export default function App() {
         {/* Navigation Sidebar */}
         <Sidebar
           currentView={currentView}
-          onSelectView={setCurrentView}
+          onSelectView={handleSelectView}
           auditBadge={currentAudit?.status}
           testPassedCount={testSuiteData?.passed}
           permissions={permissions}
@@ -645,7 +818,7 @@ export default function App() {
             <DashboardView
               data={dashboardData}
               periods={reportingPeriods}
-              onNavigate={setCurrentView}
+              onNavigate={handleSelectView}
               onSnapshot={handleCreateSnapshot}
             />
           )}
@@ -670,7 +843,7 @@ export default function App() {
               onBatchCalculate={handleBatchCalculate}
               onUploadEvidenceForActivity={(activityId) => {
                 setEvidenceActivityId(activityId);
-                setCurrentView('EVIDENCE');
+                handleSelectView('EVIDENCE');
               }}
             />
           )}
