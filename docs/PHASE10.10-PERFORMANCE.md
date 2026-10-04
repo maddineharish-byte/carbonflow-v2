@@ -332,8 +332,8 @@ large-file transfers amortise to ~25 MiB/s on local disk.
 `npm run build` (production, vite 8/rollup-builder after the other actor's
 Phase-10.12 changes):
 
-- `dist/index.html` 1,402 B | `assets/index-0CNN7ueM.css` 51,276 B (gzip ~9.3 kB)
-- `assets/index-no0Hl9ea.js` **841,460 B raw, ~223 kB gzip** as a **single chunk**
+- `dist/index.html` 2.68 kB (gzip ~1.2 kB) | `assets/*.css` 62.93 kB (gzip ~11.4 kB)
+- `assets/*.js` **969.09 kB raw, ~257.66 kB gzip** as a **single chunk**
 
 There is **no code splitting at all**: no `React.lazy`, no dynamic `import(...)`,
 no router library, and no server-side route. `App.tsx` holds a `currentView`
