@@ -31,7 +31,7 @@ public class HealthController {
         ));
     }
 
-    @GetMapping({"/api/health/readiness", "/api/v1/health/readiness"})
+    @GetMapping({"/api/health/ready", "/api/health/readiness", "/api/v1/health/readiness"})
     public ResponseEntity<Map<String, Object>> readinessCheck() {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("status", "UP");
