@@ -118,6 +118,24 @@ public class EvidenceStorageService {
         return baseDir;
     }
 
+    /**
+     * Whether the evidence vault is present and writable by this process.
+     *
+     * <p>Used by the health endpoint to distinguish "the application is running"
+     * from "evidence storage can actually accept a file". The check is
+     * deliberately metadata-only ({@code isDirectory} + {@code isWritable}): it
+     * never writes a probe file on every poll, and it never throws. It returns
+     * a boolean, never the path, so a health response can never disclose the
+     * deployment's filesystem layout.
+     */
+    public boolean isVaultWritable() {
+        try {
+            return Files.isDirectory(baseDir) && Files.isWritable(baseDir);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     // ------------------------------------------------------------------
     // Validation primitives (static — unit-testable without the container)
     // ------------------------------------------------------------------

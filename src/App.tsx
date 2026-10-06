@@ -22,23 +22,10 @@
  * what keeps the landing page free of authenticated API traffic and independent
  * of any session.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Navbar } from './components/Navbar.tsx';
 import { Sidebar, NAV_ITEMS } from './components/Sidebar.tsx';
-import { DashboardView } from './components/DashboardView.tsx';
-import { BoundariesView } from './components/BoundariesView.tsx';
-import { ActivityDataView } from './components/ActivityDataView.tsx';
-import { EmissionsView } from './components/EmissionsView.tsx';
-import { FactorsView } from './components/FactorsView.tsx';
-import { AuditView } from './components/AuditView.tsx';
-import { EvidenceView } from './components/EvidenceView.tsx';
-import { TargetsView } from './components/TargetsView.tsx';
-import { TestSuiteView } from './components/TestSuiteView.tsx';
-import { InventoryView } from './components/InventoryView.tsx';
-import { AnalyticsView } from './components/AnalyticsView.tsx';
-import { AdminView } from './components/AdminView.tsx';
-import { PlatformAdminView } from './components/PlatformAdminView.tsx';
 import { AuthBoundary } from './components/AuthBoundary.tsx';
 import { LoginView } from './components/LoginView.tsx';
 import { RegisterView } from './components/RegisterView.tsx';
@@ -54,6 +41,66 @@ import {
   shouldRestoreSession,
   usePathname,
 } from './services/router.ts';
+
+// ---------------------------------------------------------------------------
+// Authenticated workspace sections are loaded on demand (deployment
+// optimisation — no behaviour change).
+//
+// Every workspace view below sits behind `AuthBoundary`, so a visitor who only
+// ever sees the public website never needs any of them — yet the charting
+// library behind `DashboardView` alone was roughly 40% of the production
+// JavaScript. `React.lazy` moves each section into its own chunk that is
+// fetched the first time that section renders.
+//
+// What deliberately did NOT change:
+//   * the components themselves — they are the same modules, unmodified;
+//   * the authentication flow, session handling and API contract;
+//   * the `NavView` state machine and the routing rules;
+//   * which section renders for which path.
+//
+// The direct named imports the test suite uses (`import { DashboardView } from
+// './components/DashboardView.tsx'`) are unaffected: they resolve to the same
+// module, they simply no longer force it into the entry chunk.
+// ---------------------------------------------------------------------------
+const DashboardView = lazy(() =>
+  import('./components/DashboardView.tsx').then((m) => ({ default: m.DashboardView })),
+);
+const BoundariesView = lazy(() =>
+  import('./components/BoundariesView.tsx').then((m) => ({ default: m.BoundariesView })),
+);
+const ActivityDataView = lazy(() =>
+  import('./components/ActivityDataView.tsx').then((m) => ({ default: m.ActivityDataView })),
+);
+const EmissionsView = lazy(() =>
+  import('./components/EmissionsView.tsx').then((m) => ({ default: m.EmissionsView })),
+);
+const FactorsView = lazy(() =>
+  import('./components/FactorsView.tsx').then((m) => ({ default: m.FactorsView })),
+);
+const AuditView = lazy(() =>
+  import('./components/AuditView.tsx').then((m) => ({ default: m.AuditView })),
+);
+const EvidenceView = lazy(() =>
+  import('./components/EvidenceView.tsx').then((m) => ({ default: m.EvidenceView })),
+);
+const TargetsView = lazy(() =>
+  import('./components/TargetsView.tsx').then((m) => ({ default: m.TargetsView })),
+);
+const TestSuiteView = lazy(() =>
+  import('./components/TestSuiteView.tsx').then((m) => ({ default: m.TestSuiteView })),
+);
+const InventoryView = lazy(() =>
+  import('./components/InventoryView.tsx').then((m) => ({ default: m.InventoryView })),
+);
+const AnalyticsView = lazy(() =>
+  import('./components/AnalyticsView.tsx').then((m) => ({ default: m.AnalyticsView })),
+);
+const AdminView = lazy(() =>
+  import('./components/AdminView.tsx').then((m) => ({ default: m.AdminView })),
+);
+const PlatformAdminView = lazy(() =>
+  import('./components/PlatformAdminView.tsx').then((m) => ({ default: m.PlatformAdminView })),
+);
 
 import {
   api,
@@ -814,6 +861,16 @@ export default function App() {
           aria-label="Workspace content"
           className="flex-1 w-full min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto"
         >
+          {/* Workspace sections are fetched on first use. The fallback is an
+              announced status, never a blank frame, and it only ever appears
+              for a section that has never been opened in this session. */}
+          <Suspense
+            fallback={
+              <div role="status" className="py-16 text-center text-sm text-slate-400">
+                Loading {VIEW_TITLES[currentView] ?? 'workspace'}…
+              </div>
+            }
+          >
           {currentView === 'DASHBOARD' && (
             <DashboardView
               data={dashboardData}
@@ -915,6 +972,7 @@ export default function App() {
           )}
 
           {currentView === 'PLATFORM_ADMIN' && <PlatformAdminView />}
+          </Suspense>
         </main>
       </div>
 

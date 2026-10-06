@@ -1,0 +1,17 @@
+# Netlify response headers for the CarbonFlow production build.
+#
+# Vite writes content-hashed filenames into dist/assets/ (for example
+# DashboardView-1XQibnzZ.js). A hash in the name means the bytes at that URL can
+# never change, so it is safe to let the browser and the CDN keep them for a
+# year. This matters more after the workspace was split into lazy chunks: a
+# returning visitor reuses every cached chunk instead of re-downloading them.
+#
+# index.html is the opposite case. It is the only unhashed document and it
+# points at the current hashed filenames, so it must always be revalidated —
+# caching it could pin a visitor to chunk URLs that a later deploy has deleted,
+# which shows up as a blank page.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
