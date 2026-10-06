@@ -25,9 +25,12 @@ import java.util.Map;
  * NOT fail on a dependency: a database blip must not cause an orchestrator to
  * kill and restart a healthy JVM.
  *
- * <p><b>Readiness ({@code /api/health/ready})</b> is the gate a deployment host
- * should load-balance on. It answers 503 when PostgreSQL is unreachable or the
- * evidence vault is not writable, and 200 when both are usable.
+ * <p><b>Readiness ({@code /api/health/ready}, {@code /api/health/readiness},
+ * {@code /api/v1/health/readiness})</b> is the gate a deployment host should
+ * load-balance on. The three paths are deliberate aliases of one handler, so
+ * whichever probe convention an infrastructure provider expects resolves to the
+ * same logic. It answers 503 when PostgreSQL is unreachable or the evidence
+ * vault is not writable, and 200 when both are usable.
  *
  * <p><b>Disclosure.</b> Dependency checks report only {@code "UP"} /
  * {@code "DOWN"}. No connection string, no credential, no filesystem path, no
@@ -72,8 +75,12 @@ public class HealthController {
 
     /**
      * Readiness. 503 when a dependency CarbonFlow cannot work without is down.
+     *
+     * <p>Three alias paths, one implementation: {@code /api/health/ready},
+     * {@code /api/health/readiness} and {@code /api/v1/health/readiness}. They
+     * are all named explicitly in {@code SecurityConfig}'s health allow-list.
      */
-    @GetMapping("/api/health/ready")
+    @GetMapping({"/api/health/ready", "/api/health/readiness", "/api/v1/health/readiness"})
     public ResponseEntity<Map<String, Object>> readinessCheck() {
         Map<String, String> checks = dependencyChecks();
         boolean ready = "UP".equals(checks.get("database")) && "UP".equals(checks.get("evidenceStorage"));

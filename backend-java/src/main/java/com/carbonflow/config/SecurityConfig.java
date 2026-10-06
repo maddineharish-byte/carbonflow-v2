@@ -76,15 +76,16 @@ public class SecurityConfig {
                         // Refresh is authenticated by the refresh token in the body
                         // itself (Node parity): no bearer token required.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
-                        // Health surface, named explicitly rather than left to the
+// Health surface, named explicitly rather than left to the
                         // `.anyRequest().permitAll()` catch-all below. An
                         // infrastructure probe must not depend on a catch-all that
                         // is far more likely to be tightened than it is to stay.
                         // `requestMatchers(String...)` matches exact paths, so this
                         // lists each public health route and nothing else — it cannot
                         // widen access to any business API, and `/api/v1/**` below
-                        // still authenticates everything else.
-                        .requestMatchers("/api/health", "/api/v1/health", "/api/health/ready").permitAll()
+                        // still authenticates everything else. The three readiness
+                        // paths are aliases of one handler in HealthController.
+                        .requestMatchers("/api/health", "/api/v1/health", "/api/health/ready", "/api/health/readiness", "/api/v1/health/readiness").permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         // Anything outside the API surface (static assets, error page)
                         // is public, mirroring the Node backend's static serving.
