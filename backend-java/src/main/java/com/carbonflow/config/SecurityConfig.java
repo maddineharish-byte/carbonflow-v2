@@ -76,7 +76,7 @@ public class SecurityConfig {
                         // Refresh is authenticated by the refresh token in the body
                         // itself (Node parity): no bearer token required.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
-                        .requestMatchers("/api/health", "/api/v1/health").permitAll()
+                        .requestMatchers("/api/health", "/api/v1/health", "/api/health/ready", "/api/health/readiness", "/api/v1/health/readiness").permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         // Anything outside the API surface (static assets, error page)
                         // is public, mirroring the Node backend's static serving.
