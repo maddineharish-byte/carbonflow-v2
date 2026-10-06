@@ -54,8 +54,9 @@ Evidence file bytes → filesystem vault (CARBONFLOW_EVIDENCE_VAULT_DIR)
 - **Maven 3.9+** — build/test driver (no Maven wrapper is committed; `mvn` must
   be on `PATH`)
 - **PostgreSQL 15+** — an existing database, or an empty one Flyway will build
-- **Node.js 20+** — build/dev/test tooling for the **frontend only**. The
-  frontend is a static bundle; Node is not a runtime server
+- **Node.js 20.19+ or 22.12+** — build/dev/test tooling for the **frontend only**
+  (required by Vite 8). The frontend is a static bundle; Node is not a runtime
+  server
 
 ## Environment
 
